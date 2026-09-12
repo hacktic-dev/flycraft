@@ -1,4 +1,4 @@
-"""Run-2 signed reversible learning adapter with pinned DOOMFLY v6 RGB vision."""
+"""Run-2C selective signed learning adapter with pinned DOOMFLY v6 RGB vision."""
 import ctypes
 import hashlib
 import json
@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[2]
 def prepare_kernel():
     """Build the existing native neural kernel plus the read-only spike hook.
 
-    Run-2 plasticity is applied outside this kernel. Native v1 LTD is always
+    Run-2C plasticity is applied outside this kernel. Native v1 LTD is always
     called with learning_enabled=0 by R8VisualMemoryBrain.
     """
     folder = ROOT/'.tools/learning-kernel'
@@ -48,13 +48,18 @@ def prepare_kernel():
             '-Wl,--export-all-symbols', str(cpp), '-o', str(dll)
         ], check=True)
         record = {
-            'model': 'gamma1-centered-signed-v2-neural-runtime',
+            'model': 'gamma1-selective-signed-v3-neural-runtime',
             'source_sha256': hashlib.sha256(native_upstream.SOURCE.read_bytes()).hexdigest(),
             'observer_sha256': digest,
             'binary_sha256': hashlib.sha256(dll.read_bytes()).hexdigest(),
         }
         meta.write_text(json.dumps(record, indent=2))
-    # CenteredMemoryBrain ultimately calls legacy MemoryBrain.__init__, so patch
+    # The native binary is intentionally unchanged by v3; refresh provenance even
+    # when an already-correct observer DLL can be reused.
+    if record.get('model') != 'gamma1-selective-signed-v3-neural-runtime':
+        record['model'] = 'gamma1-selective-signed-v3-neural-runtime'
+        meta.write_text(json.dumps(record, indent=2))
+    # SelectiveMemoryBrain ultimately calls legacy MemoryBrain.__init__, so patch
     # the legacy module's runtime exactly as before.
     native_upstream.LIBRARY = dll
     native_upstream.build = lambda: record
@@ -68,8 +73,12 @@ class LearningFly:
         self.brain = R8VisualMemoryBrain(
             eta=config['eta'],
             eligibility_tau_ms=config['eligibility_tau_ms'],
+            eligibility_baseline_tau_ms=config['eligibility_baseline_tau_ms'],
             eligibility_reference_hz=config['eligibility_reference_hz'],
             eligibility_gate_hz=config['eligibility_gate_hz'],
+            eligibility_winner_fraction=config['eligibility_winner_fraction'],
+            eligibility_max_kcs=config['eligibility_max_kcs'],
+            eligibility_activity_floor=config['eligibility_activity_floor'],
             recovery_tau_seconds=config['recovery_tau_seconds'],
             minimum_fraction=config['minimum_fraction'],
             maximum_fraction=config['maximum_fraction'],
@@ -128,7 +137,8 @@ class LearningFly:
         self.set_bins(self.bins.ctypes.data if record else None)
 
         # Evaluation/replay must be observationally frozen, including traces.
-        frozen_names = ('eligibility', 'eligibility_last', 'modulation', 'modulation_last', 'credit_trace')
+        frozen_names = ('eligibility', 'eligibility_last', 'modulation', 'modulation_last',
+                        'credit_trace', 'credit_baseline', 'credit_age_ms')
         frozen = {k: getattr(self.brain, k).copy() for k in frozen_names} if not self.learning else {}
         try:
             counts, wall = self.brain.rgb_step(

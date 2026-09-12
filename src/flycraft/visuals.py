@@ -12,6 +12,10 @@ from . import anatomy
 BG=(12,17,27)
 FG=(229,237,247)
 CYAN=(56,218,221)
+POS=(91,225,165)
+NEG=(245,105,100)
+AVERSIVE=(190,125,255)
+MUTED=(118,132,150)
 HD=(1920,1080)
 
 def font(size=18):
@@ -223,7 +227,7 @@ class Visuals:
             d.text((width-300,15),f'{np.count_nonzero(counts):,} firing this frame',font=font(18),fill=CYAN)
             d.text((28,height-27),'MaleCNS anatomy   /   gold = spikes   /   250 ms visual trail',font=font(16),fill=FG)
             return im
-        learning='AVERSIVE LTD (EXPERIMENTAL)' if getattr(self.fly,'learning',False) else 'OFF'
+        learning='SIGNED REVERSIBLE (EXPERIMENTAL)' if getattr(self.fly,'learning',False) else 'OFF'
         d.text((18,12),f'MALE CNS ANATOMY | {t:.3f} s | LEARNING: {learning}',font=font(24),fill=FG)
         legend={
             'spikes':'gold: spikes, 250 ms trail',
@@ -308,18 +312,33 @@ class Visuals:
         return activity
 
     def training_panel(self,im,p):
-        """Render the 960x540 training panel directly at full left-column width."""
+        """Render actions plus the signals that actually reach plasticity.
+
+        The behavioural reward score is deliberately not presented as a stimulus:
+        the fly never receives that scalar. Instead this panel shows the signed
+        teaching event applied to KC->MBON11 plasticity and the independent PPL101
+        aversive neural pulse when it is actually active.
+        """
         d=ImageDraw.Draw(im)
         width,height=im.size
         d.rectangle((0,0,width-1,height-1),fill=BG)
-        best='--' if p['best_eval'] is None else f'{p["best_eval"]:.0%}'
 
-        # Header / column labels.
+        teaching=p.get('teaching')
+        signal=float(teaching.get('signal',0.0)) if teaching else 0.0
+        if not getattr(self.fly,'learning',False):
+            teach_label='TEACHING OFF / FROZEN';teach_color=MUTED
+        elif signal>0:
+            teach_label=f'TEACH +{signal:.2f}  POSITIVE';teach_color=POS
+        elif signal<0:
+            teach_label=f'TEACH {signal:.2f}  NEGATIVE';teach_color=NEG
+        else:
+            teach_label='TEACH +0.00  NEUTRAL';teach_color=MUTED
+
+        # Header / column labels. No reward scalar is shown here because reward is
+        # an external evaluation metric, not something delivered to the fly.
         d.text((22,7),f'EP {p["episode"]}   /   {p["step"]:,} of {p["total"]:,} steps',font=font(18),fill=FG)
-        reward_text=f'REWARD {p["reward"]:+.2f}'
-        reward_font=font(21)
-        reward_box=d.textbbox((0,0),reward_text,font=reward_font)
-        d.text((width-22-(reward_box[2]-reward_box[0]),7),reward_text,font=reward_font,fill=(245,195,78))
+        tf=font(18);box=d.textbbox((0,0),teach_label,font=tf)
+        d.text((width-22-(box[2]-box[0]),8),teach_label,font=tf,fill=teach_color)
         d.text((22,38),'NEURONS',font=font(14),fill=FG)
         d.text((309,38),'FIXED DECODER',font=font(14),fill=FG)
         d.text((725,38),'GAME INPUT',font=font(14),fill=FG)
@@ -328,34 +347,28 @@ class Visuals:
         if m:
             def meter(xx,yy,value,color,width_px=180,maximum=100):
                 d.rounded_rectangle((xx,yy,xx+width_px,yy+6),radius=3,fill=(37,49,65))
-                fill_w=int(width_px*np.clip(value/maximum,0,1))
+                fill_w=int(width_px*np.clip(value/maximum,0,1)) if maximum>0 else 0
                 if fill_w:d.rounded_rectangle((xx,yy,xx+fill_w,yy+6),radius=3,fill=color)
             def path(yy,enabled,color):
                 col=color if enabled else (54,65,80)
                 d.line((302,yy,680,yy),fill=col,width=3)
                 d.polygon([(680,yy),(668,yy-6),(668,yy+6)],fill=col)
-            cyan=CYAN;green=(91,225,165);gold=(245,195,78)
+            cyan=CYAN;green=POS;gold=(245,195,78)
             card_left,card_right=18,width-18
             for top in (58,124,190):
                 d.rounded_rectangle((card_left,top,card_right,top+59),radius=11,outline=(41,54,72),width=1)
 
-            # Turn card.
             d.text((30,62),'DNp20 L / R  Hz',font=font(16),fill=cyan)
-            meter(30,87,m['left_hz'],cyan,maximum=100)
-            meter(30,105,m['right_hz'],cyan,maximum=100)
-            d.text((220,80),f'{m["left_hz"]:.0f}',font=font(13),fill=FG)
-            d.text((220,99),f'{m["right_hz"]:.0f}',font=font(13),fill=FG)
+            meter(30,87,m['left_hz'],cyan,maximum=100);meter(30,105,m['right_hz'],cyan,maximum=100)
+            d.text((220,80),f'{m["left_hz"]:.0f}',font=font(13),fill=FG);d.text((220,99),f'{m["right_hz"]:.0f}',font=font(13),fill=FG)
             path(92,abs(m['yaw'])>0,cyan)
             d.text((326,62),'rate difference -> camera',font=font(15),fill=FG)
             d.text((342,99),f'x0.12  then  x{m["yaw_gain"]:g}',font=font(13),fill=FG)
             direction='LEFT' if m['yaw']<0 else 'RIGHT' if m['yaw']>0 else 'STILL'
-            d.text((704,64),direction,font=font(20),fill=cyan)
-            d.text((704,94),f'{abs(m["yaw"]):.2f} deg/tick',font=font(16),fill=FG)
+            d.text((704,64),direction,font=font(20),fill=cyan);d.text((704,94),f'{abs(m["yaw"]):.2f} deg/tick',font=font(16),fill=FG)
 
-            # Forward card.
             d.text((30,128),'DNpe017 L+R Hz',font=font(16),fill=green)
-            meter(30,157,m['forward_hz'],green)
-            d.text((220,150),f'{m["forward_hz"]:.0f}',font=font(13),fill=FG)
+            meter(30,157,m['forward_hz'],green);d.text((220,150),f'{m["forward_hz"]:.0f}',font=font(13),fill=FG)
             path(157,m['walking'],green)
             d.text((326,128),'rate -> forward threshold',font=font(15),fill=FG)
             d.text((342,165),f'{m["forward"]:.1f} > {m["forward_threshold"]:g}',font=font(13),fill=FG)
@@ -363,12 +376,9 @@ class Visuals:
             d.text((720,146),'W',font=font(23),fill=BG if m['walking'] else FG)
             d.text((766,149),'HELD' if m['walking'] else 'OFF',font=font(19),fill=green if m['walking'] else FG)
 
-            # Attack card.
             d.text((30,194),'DNpe017 spikes',font=font(16),fill=gold)
-            for j in range(min(12,m['spikes'])):
-                d.line((33+j*14,238,33+j*14,220),fill=gold,width=3)
-            d.text((220,219),str(m['spikes']),font=font(14),fill=FG)
-            path(223,m['attacking'],gold)
+            for j in range(min(12,m['spikes'])):d.line((33+j*14,238,33+j*14,220),fill=gold,width=3)
+            d.text((220,219),str(m['spikes']),font=font(14),fill=FG);path(223,m['attacking'],gold)
             d.text((326,194),'pulse -> accumulate -> hold',font=font(15),fill=FG)
             meter(342,235,m['accumulator'],gold,width_px=160,maximum=m['threshold'])
             d.text((516,225),f'{m["hold_left"]} ticks',font=font(13),fill=FG)
@@ -385,75 +395,124 @@ class Visuals:
                 f'PROG {behavior["normalized_target_progress"]:+.0%}   AIM<30 {behavior["aim_within_30_fraction"]:.0%}   '
                 f'W aim/other {cpct(behavior["forward_when_ahead_fraction"],behavior["ahead_ticks"])}/{cpct(behavior["forward_when_not_ahead_fraction"],behavior["not_ahead_ticks"])}   '
                 f'ATK aim/other {cpct(behavior["attack_when_ahead_fraction"],behavior["ahead_ticks"])}/{cpct(behavior["attack_when_not_ahead_fraction"],behavior["not_ahead_ticks"])}   '
-                f'TURN {behavior["turn_bias_deg_per_tick"]:+.2f} deg/t',
-                font=font(12),fill=(160,174,190))
+                f'TURN {behavior["turn_bias_deg_per_tick"]:+.2f} deg/t',font=font(12),fill=(160,174,190))
 
-        # Draw every control tick, including the first episode; 60 Hz video
-        # repeats do not create additional reward samples.
+        # Trace only control ticks; each tick is rendered three times into 60 Hz video.
         key=p['episode']
-        if getattr(self,'reward_episode',None)!=key:
-            self.reward_episode=key;self.reward_trace=[]
-        tick=p.get('episode_step',p['step'])
-        if not self.reward_trace:self.reward_trace.append((max(0,tick-1),0.))
-        if self.reward_trace[-1][0]!=tick:self.reward_trace.append((tick,p['reward']))
-        else:self.reward_trace[-1]=(tick,p['reward'])
+        if getattr(self,'teaching_episode',None)!=key:
+            self.teaching_episode=key;self.teaching_trace=[]
+        tick=int(p.get('episode_step',p['step']))
+        trace_item={
+            'tick':tick,'signal':signal,
+            'aversive':bool(p.get('aversive_active',False)),
+            'scheduled':bool((p.get('reinforcement') or {}).get('scheduled_aversive',False)),
+        }
+        if not self.teaching_trace or self.teaching_trace[-1]['tick']!=tick:self.teaching_trace.append(trace_item)
+        else:self.teaching_trace[-1]=trace_item
 
-        def graph(title,ys,xs,top,height_px=34,xlabel='step',style='line',bounds=None,empty='Waiting for data'):
-            label_x=22;left=74;right=width-24;bottom=top+height_px
-            d.text((label_x,top-18),title,font=font(13),fill=FG)
-            if not len(ys):
-                d.text((left,top+9),empty,font=font(13),fill=(160,174,190));return
-            a=np.asarray(ys,dtype=float);xx=np.asarray(xs,dtype=float)
-            if bounds is None:
-                low=min(0.,float(a.min()));high=max(0.,float(a.max()))
-                pad=max(.01,(high-low)*.1);low-=pad;high+=pad
+        # Compact teaching card. Keep only the signals that matter on video:
+        # what was taught now, how much plasticity was eligible, cumulative
+        # signed teaching received this episode, and real PPL101 stimulation.
+        top=303;teach_bottom=407
+        d.rounded_rectangle((18,top,width-18,teach_bottom),radius=11,outline=(41,54,72),width=1)
+        d.text((30,309),'PLASTIC TEACHING | THIS EPISODE',font=font(14),fill=FG)
+        if not teaching:
+            d.text((30,337),'Teaching is disabled during frozen evaluation / replay.',font=font(13),fill=MUTED)
+        else:
+            reinforcement=p.get('reinforcement') or {}
+            plastic=reinforcement.get('plasticity') or {}
+            counts=p.get('teaching_counts') or {'positive':0,'negative':0,'neutral':0}
+            active_edges=int(plastic.get('active_edges',0))
+            candidate_edges=int(plastic.get('candidate_edges',active_edges))
+            total_edges=int(p.get('plastic_edges',0))
+            if not total_edges:
+                circuit=getattr(self.fly.brain,'circuit',None)
+                total_edges=len(circuit['edges']) if isinstance(circuit,dict) and 'edges' in circuit else 0
+            current_aversive=bool(p.get('aversive_active',False))
+            scheduled=bool(reinforcement.get('scheduled_aversive',False))
+            av_text=(f'PPL101 ACTIVE +{float(p.get("aversive_current",0.0)):.1f}' if current_aversive else
+                     'PPL101 NEXT TICK' if scheduled else 'PPL101 off')
+            av_col=AVERSIVE if current_aversive or scheduled else MUTED
+            ab=d.textbbox((0,0),av_text,font=font(10));d.text((width-30-(ab[2]-ab[0]),311),av_text,font=font(10),fill=av_col)
+
+            pos_sum=sum(max(0.0,float(item['signal'])) for item in self.teaching_trace)
+            neg_sum=sum(min(0.0,float(item['signal'])) for item in self.teaching_trace)
+            selected=f'{active_edges:,}/{candidate_edges:,}' if candidate_edges else f'{active_edges:,}/0'
+            summary=(f'NOW {signal:+.3f}   selected {selected} candidate edges   |   '
+                     f'sum +{pos_sum:.2f} / {neg_sum:.2f}   |   '
+                     f'events +{counts.get("positive",0)} / -{counts.get("negative",0)} / 0 {counts.get("neutral",0)}')
+            d.text((30,329),summary,font=font(10),fill=teach_color if signal else FG)
+
+            # One symmetric autoscale for BOTH directions. Equal-magnitude
+            # positive and negative teaching therefore always has equal visual
+            # height. The range only expands when a stronger absolute event is
+            # encountered, so weak signals still read clearly in compressed video.
+            left,right=68,width-24;g_top,g_bottom=347,399;zero=(g_top+g_bottom)//2
+            max_abs=max((abs(float(item['signal'])) for item in self.teaching_trace),default=0.0)
+            signal_scale=max(0.03,max_abs)
+            d.line((left,zero,right,zero),fill=(75,89,108),width=1)
+            scale_lab=f'{signal_scale:.2f}' if signal_scale<1 else f'{signal_scale:.1f}'
+            d.text((28,g_top-4),f'+{scale_lab}',font=font(8),fill=POS)
+            d.text((42,zero-4),'0',font=font(8),fill=MUTED)
+            d.text((28,g_bottom-7),f'-{scale_lab}',font=font(8),fill=NEG)
+            if self.teaching_trace:
+                last_tick=max(1,self.teaching_trace[-1]['tick'])
+                half=(g_bottom-g_top)*0.46
+                for item in self.teaching_trace[-400:]:
+                    xx=left+(item['tick']-1)/max(1,last_tick-1)*(right-left)
+                    v=float(item['signal'])
+                    yy=zero-(v/signal_scale)*half
+                    color=POS if v>0 else NEG if v<0 else (60,73,91)
+                    if v!=0:d.line((xx,zero,xx,yy),fill=color,width=2)
+                    if item['aversive']:d.rectangle((xx-1,g_top,xx+1,g_top+4),fill=AVERSIVE)
+                    elif item['scheduled']:d.point((xx,g_top+6),fill=AVERSIVE)
+
+        # Behavioral learning curve. This is deliberately separate from teaching:
+        # it answers "is behavior improving?", not "what signal did we inject?".
+        learn_top=413;learn_bottom=532
+        d.rounded_rectangle((18,learn_top,width-18,learn_bottom),radius=11,outline=(41,54,72),width=1)
+        curve=p.get('learning_curve') or {}
+        episodes=list(curve.get('episodes') or [])
+        vals=[float(v) for v in (curve.get('performance') or [])]
+        rolling=[float(v) for v in (curve.get('rolling') or [])]
+        successes=list(curve.get('success') or [])
+        roll_window=int(curve.get('window',p.get('rolling_window',10)))
+        d.text((30,419),'IS IT LEARNING? | EPISODE PERFORMANCE OVER TIME',font=font(13),fill=FG)
+        d.text((30,436),f'combined task score   |   dots = episodes   cyan = rolling {roll_window}   gold ring = log broken   |   not input to fly',font=font(9),fill=CYAN)
+        if not vals:
+            d.text((30,474),'Waiting for the first completed episode...',font=font(13),fill=MUTED)
+        else:
+            plot_l,plot_r=69,width-25;plot_t,plot_b=452,520
+            allv=vals+rolling
+            yscale=max(0.25,max((abs(v) for v in allv),default=0.25))
+            zero_y=(plot_t+plot_b)//2
+            d.line((plot_l,zero_y,plot_r,zero_y),fill=(66,80,98),width=1)
+            if yscale>=10:
+                ylab=f'{yscale:.0f}'
+            elif yscale>=1:
+                ylab=f'{yscale:.1f}'
             else:
-                low,high=bounds
-            if high<=low:high=low+.02
-            for value in (low,0.,high):
-                yy=bottom-(value-low)/(high-low)*height_px
-                d.line((left,yy,right,yy),fill=(42,55,72))
-                d.text((label_x,yy-6),f'{value:.2f}',font=font(10),fill=FG)
-            d.line((left,top,left,bottom),fill=FG)
-            span=max(1.,float(xx[-1]-xx[0]))
-            if style=='points':
-                indices=np.arange(len(a))
-            else:
-                indices=np.unique(np.linspace(0,len(a)-1,min(len(a),900)).astype(int))
-            pts=[(left+(xx[i]-xx[0])/span*(right-left),bottom-(a[i]-low)/(high-low)*height_px) for i in indices]
-            if style=='line' and len(pts)>1:d.line(pts,fill=CYAN if 'ROLLING' in title else (245,195,78),width=2)
-            if style=='points':
-                if len(pts)>1:d.line(pts,fill=(245,195,78),width=2)
-                for px,py in pts:d.ellipse((px-2,py-2,px+2,py+2),fill=(245,195,78))
-            elif pts:
-                px,py=pts[-1];d.ellipse((px-3,py-3,px+3,py+3),fill=CYAN if 'ROLLING' in title else (245,195,78))
-            d.text((left,bottom+1),str(int(xx[0])),font=font(10),fill=FG)
-            end_text=f'{xlabel} {int(xx[-1])}'
-            end_box=d.textbbox((0,0),end_text,font=font(10))
-            d.text((right-(end_box[2]-end_box[0]),bottom+1),end_text,font=font(10),fill=FG)
-
-        graph('CURRENT EPISODE | CUMULATIVE REWARD',
-            [v for t,v in self.reward_trace],[t for t,v in self.reward_trace],318,height_px=28)
-        values=np.asarray(p.get('mean_cumulative_history',[]),dtype=float)
-        episodes=np.asarray(p.get('mean_cumulative_episodes',[]),dtype=float)
-        win=p['rolling_window'];ix=np.arange(len(values));sums=np.r_[0,np.cumsum(values)]
-        smooth=(sums[ix+1]-sums[np.maximum(0,ix+1-win)])/np.minimum(ix+1,win) if len(values) else np.asarray([],dtype=float)
-        episode_bounds=None
-        if len(values):
-            low=min(0.,float(values.min()),float(smooth.min()));high=max(0.,float(values.max()),float(smooth.max()))
-            pad=max(.001,(high-low)*.1);episode_bounds=(low-pad,high+pad)
-        graph('COMPLETED EPISODE | MEAN CUMULATIVE REWARD',values,episodes,391,height_px=28,xlabel='episode',style='points',bounds=episode_bounds,empty='No reconstructed episode means yet')
-        graph(f'ROLLING MEAN CUMULATIVE REWARD | LAST {win} EPISODES',smooth,episodes,464,height_px=28,xlabel='episode',style='line',bounds=episode_bounds,empty='No reconstructed episode means yet')
-
-        br=p.get('behavior_rolling',{})
-        def rollpct(key):
-            value=br.get(key)
-            return '--' if value is None else f'{value:.0%}'
-        footer=(f'LAST {p["rolling_window"]}  meanR {p.get("mean_cumulative_rolling",0.):+.3f}   '
-                f'prog {rollpct("normalized_target_progress")}   aim<30 {rollpct("aim_within_30_fraction")}   '
-                f'W aim {rollpct("forward_when_ahead_fraction")}   ATK aim {rollpct("attack_when_ahead_fraction")}   '
-                f'success {rollpct("success_rate")}   eval {best}')
-        d.text((22,518),footer,font=font(12),fill=CYAN)
+                ylab=f'{yscale:.2f}'
+            d.text((27,plot_t-3),f'+{ylab}',font=font(8),fill=POS)
+            d.text((43,zero_y-4),'0',font=font(8),fill=MUTED)
+            d.text((27,plot_b-7),f'-{ylab}',font=font(8),fill=NEG)
+            n=len(vals)
+            def px(i):return plot_l if n<=1 else plot_l+i/(n-1)*(plot_r-plot_l)
+            def py(v):return zero_y-(v/yscale)*(plot_b-plot_t)*0.46
+            # Individual completed episodes: faint dots preserve the noisy data.
+            for i,v in enumerate(vals):
+                xx,yy=px(i),py(v)
+                d.ellipse((xx-1.5,yy-1.5,xx+1.5,yy+1.5),fill=(119,133,151))
+                if i<len(successes) and successes[i]:d.ellipse((xx-4,yy-4,xx+4,yy+4),outline=(245,195,78),width=2)
+            if rolling:
+                pts=[(px(i),py(v)) for i,v in enumerate(rolling)]
+                if len(pts)>1:d.line(pts,fill=CYAN,width=3,joint='curve')
+                else:
+                    xx,yy=pts[0];d.ellipse((xx-2,yy-2,xx+2,yy+2),fill=CYAN)
+            latest=rolling[-1] if rolling else vals[-1]
+            success_count=sum(bool(x) for x in successes)
+            status=f'rolling {latest:+.3f}   successes {success_count}/{len(vals)}'
+            sb=d.textbbox((0,0),status,font=font(10));d.text((width-30-(sb[2]-sb[0]),419),status,font=font(10),fill=CYAN)
 
     def update(self,rgb,control,frame,preview_rgb=None):
         retina=self.retina_image()

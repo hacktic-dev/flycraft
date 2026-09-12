@@ -1,79 +1,168 @@
-# FlyCraft Run 2 — reversible signed plasticity
+# FlyCraft Run 2C — selective plasticity + balanced teaching
 
-## What changed
+## Current Run-2C changes
 
-Run 1 used one-way PPL101-gated LTD. Repeated punishment could hit every eligible KC→MBON11 edge many times per PPL101 spike, eligibility persisted for 1 s, punishment pulses could be continually extended, positive reward did not alter plasticity, and weights could only move down to 0.1× baseline. The result was catastrophic saturation.
+Run 2C supersedes the Run-2B description below. It uses
+`gamma1-selective-signed-v3`: a 120 ms activity trace relative to a 1,500 ms
+per-KC baseline, with competitive credit limited by a 25% winner fraction and
+256-KC cap. Balanced raw-delta teaching remains separate from task scoring.
+Mean-efficacy drift now participates in health alarms, and collapse aborts are
+enabled by default. Frozen evaluation preserves the new credit baseline and age.
 
-Run 2 keeps the same connectome, KC→MBON11 plastic-edge selection, Minecraft sensory path, R8 visual adapter and DN decoder, but replaces the plastic update with an explicitly experimental signed rule:
+The dashboard shows signed teaching and PPL101 events alongside a separate
+completed-episode performance curve and rolling average. The earlier component
+bar dashboard description below is historical.
 
-- recent KC activity is tracked with a 300 ms eligibility trace;
-- weak trace below 1 Hz-equivalent is ignored;
-- positive task outcomes potentiate eligible edges;
-- negative task outcomes depress eligible edges;
-- each teaching event is bounded and occurs once per 50 ms control outcome, not once per PPL101 spike;
-- weights are bounded to 0.5×–1.5× their reconstructed baseline;
+Validation: `python -m flycraft.validate_teaching` and
+`python -m doom_learning.validate_flycraft_v3` pass locally. The latter and the
+v3 learning implementation are local changes in the separate, ignored
+`vendor/doomfly` repository; this FlyCraft commit does not package them. A fresh
+checkout requires those DOOMFLY patches as well.
+
+## Historical Run-2B notes
+
+This is the updated Run-2 patch. It keeps the reversible KC→MBON11 plasticity introduced for Run 2, but fixes the positive bias found in the first 2,000-step diagnostic and redesigns the dashboard around signals the fly actually receives.
+
+## 1. Plasticity remains reversible
+
+The underlying Run-2 rule is unchanged:
+
+- recent KC activity uses a 300 ms credit/eligibility trace;
+- positive teaching potentiates eligible KC→MBON11 edges;
+- negative teaching depresses eligible KC→MBON11 edges;
+- updates are bounded and occur once per 50 ms control outcome;
+- weights are limited to 0.5×–1.5× their reconstructed baseline;
 - weights slowly relax toward 1.0× baseline with a 1,800 s simulated-time constant;
-- fast neural state, decoder state and eligibility are reset between Minecraft episodes while learned weights are preserved.
+- fast neural state, decoder state and eligibility are reset between Minecraft episodes while learned weights are preserved;
+- sufficiently strong negative teaching can additionally schedule the separate short PPL101 aversive neural pulse.
 
-The positive signal is an external experimental teaching gate derived from Minecraft outcomes. It is **not** presented as a reconstructed appetitive DAN pathway. PPL101 remains only as a milder aversive neural perturbation for sufficiently strong negative outcomes.
+Positive teaching is an explicit experimental FlyCraft signal. It is **not** claimed to be a reconstructed appetitive DAN pathway.
 
-## Teaching signal
+## 2. Reward and teaching are now fully separate
 
-The normal reward score is unchanged for evaluation. For plasticity, `step_penalty` is excluded. Angle/distance improvement, crosshair acquisition, breaking-progress gain and success contribute positive teaching; the corresponding worsenings/loss contribute negative teaching. A small deadband suppresses jitter, then the signal is smoothly bounded to [-1,+1].
+The first Run-2 patch derived teaching from the already weighted reward components. That accidentally inherited the reward asymmetry:
 
-Default teaching settings:
+- angle reward: +0.05 improvement / -0.025 worsening;
+- distance reward: +0.10 improvement / -0.05 worsening;
+- break-progress reward: +2.0 gain / -1.0 loss.
 
-- deadband: 0.002 reward units
-- scale: 0.02 reward units
-- positive gain: 1.0
-- negative gain: 1.0
+This meant equal-and-opposite physical behavior did not cancel neurally. Run 2B fixes this.
 
-## Aversive pulse
+The existing `reward` section is still used for episode scoring/evaluation and is unchanged. Plasticity now uses a separate `teaching` section and starts from raw physical changes:
 
-PPL101 stimulation no longer directly performs the weight update. It is a neural perturbation scheduled only when the signed teaching signal is <= -0.35.
+```json
+"teaching": {
+  "model": "balanced-raw-delta-v1",
+  "angle_scale_deg": 15.0,
+  "distance_scale_blocks": 0.25,
+  "progress_scale": 0.1,
+  "angle_weight": 0.25,
+  "distance_weight": 0.35,
+  "progress_weight": 0.75,
+  "crosshair_weight": 0.2,
+  "success_weight": 1.0,
+  "deadband": 0.03
+}
+```
 
-Defaults:
+For aim, distance, breaking progress and crosshair acquisition/loss, equal-and-opposite physical changes now produce equal-and-opposite teaching components. The components are summed, passed through `tanh`, and values smaller than the deadband are treated as neutral.
 
-- current: +8 (was +30)
-- duration: 2 control ticks = 100 ms (was 4 = 200 ms)
-- cooldown: 4 control ticks = 200 ms
-- a new negative event cannot extend a pulse that is already active.
+A successful log break remains intentionally positive-only because it is the terminal task success event. Crosshair disappearance caused by the log being successfully broken is not counted as a negative crosshair-loss event.
 
-## Plasticity alarm
+The generic per-step time penalty remains score-only and never teaches the fly.
 
-Every 100 training steps PowerShell prints a line such as:
+## 3. Console output now exposes teaching balance
 
-`PLASTICITY OK | step 1,000 | mean 0.997 | p10/med/p90 ... | floor 0.0% | ceiling 0.0% | saturated 0.0% | outside 0.75-1.25 0.0%`
+The 20-step status line includes per-episode teaching-event counts:
 
-It escalates to `WARNING`, `CRITICAL`, or `COLLAPSE` when too many edges reach the hard bounds or drift outside 0.75×–1.25× baseline. `abort_on_collapse` defaults to false, so it warns loudly without killing a run. Set it to true if automatic termination is preferred.
+```text
+Teach +0.13 | TeachEv +28/-35/057
+```
 
-## Recommended first launch
+This lets you immediately see whether positive, negative and neutral outcomes are all occurring instead of inferring that from occasional sampled `Teach` values.
 
-1. Apply both the FlyCraft and DOOMFLY changes.
-2. Delete FlyCraft's `.tools/learning-kernel` and `.tools/fast-learning-kernel` directories so the Windows DLLs are rebuilt from the patched kernel source.
-3. In the DOOMFLY Python environment, run:
+The existing plasticity-health alarm remains unchanged and still reports every 100 steps.
 
-   `python -m doom_learning.validate_flycraft_v2`
+## 4. Dashboard now shows what the fly actually experiences
 
-   Expected: `Run-2 plasticity smoke test: PASS`.
-4. Start a **fresh**, short run first, not a resume/branch from Run 1:
+The large `REWARD` display and reward-history graphs have been removed from the training dashboard because the reward scalar is an external evaluation metric and is not delivered to the fly.
 
-   `./train.ps1 -Mode Fresh -Steps 2000 -CheckpointEvery 1000 -NoPreview`
+The lower dashboard now shows:
 
-5. Check the `PLASTICITY ...` lines at steps 100, 200, ... before committing to a long run. A healthy early run should have essentially 0% at the floor/ceiling and should not show broad migration outside 0.75×–1.25× baseline.
-6. If the 2k run is healthy, extend to 5k and compare frozen evaluation against the virgin baseline before starting a 100k run.
+- the exact signed KC→MBON11 teaching value on the current control tick;
+- whether it is POSITIVE, NEGATIVE or NEUTRAL;
+- how many plastic edges are currently eligible enough to be updated;
+- separate AIM, DIST, BREAK, XHAIR and SUCCESS teaching-component bars;
+- the raw physical deltas that caused those components;
+- a full per-episode signed teaching-event timeline;
+- green spikes for positive plastic teaching;
+- red spikes for negative plastic teaching;
+- purple markers for actual PPL101 aversive stimulation;
+- a separate indication when a PPL101 pulse has only been scheduled for the next tick;
+- cumulative positive / negative / neutral teaching-event counts for the episode.
 
-## Files added/changed
+Frozen evaluation/replay explicitly displays that teaching is off.
 
-DOOMFLY:
-- `doom_learning/flycraft_rule_v2.py` (new)
-- `doom_learning/flycraft_v2.py` (new)
-- `doom_learning/validate_flycraft_v2.py` (new)
-- `doom_learning/kernel.cpp` (small guard so legacy eligibility is not updated when native LTD is disabled)
+The neural-activity view label has also been changed from the obsolete `AVERSIVE LTD` wording to `SIGNED REVERSIBLE (EXPERIMENTAL)`.
 
-FlyCraft:
+## 5. Validation
+
+A dependency-light validator was added:
+
+```powershell
+python -m flycraft.validate_teaching
+```
+
+It verifies exact positive/negative symmetry for isolated aim, distance, breaking-progress and crosshair changes. Expected output begins:
+
+```text
+BALANCED TEACHING CHECK: PASS
+```
+
+The existing plasticity-rule smoke test still passes:
+
+```powershell
+python -m doom_learning.validate_flycraft_v2
+```
+
+In the packaged source, 500 consecutive synthetic negative teaching events leave the plastic population at mean ~0.885× baseline with 0% at the floor, and 500 matched positive events restore it to 1.000×.
+
+## 6. Recommended next run
+
+Because the teaching policy has changed, start **Fresh** rather than resuming the first 2,000-step diagnostic:
+
+```powershell
+.\train.ps1 -Mode Fresh -Steps 2000 -CheckpointEvery 1000 -NoPreview
+```
+
+Watch both:
+
+```text
+TeachEv +.../-.../0...
+```
+
+and:
+
+```text
+PLASTICITY OK | ...
+```
+
+For this diagnostic, the main goals are:
+
+- both positive and negative teaching events occur;
+- the mean efficacy stays near 1.0 rather than steadily marching upward or downward;
+- p10/median/p90 begin to develop some spread rather than all 4,184 edges moving identically;
+- floor/ceiling saturation remains essentially 0%;
+- broad drift outside 0.75×–1.25× remains near 0%.
+
+## Files changed in Run 2B
+
+Compared with the previous Run-2 patch:
+
 - `training.json`
-- `src/flycraft/learning.py`
-- `src/flycraft/r8_visual.py`
 - `src/flycraft/training_metrics.py`
 - `src/flycraft/train.py`
+- `src/flycraft/visuals.py`
+- `src/flycraft/validate_teaching.py` (new)
+
+The DOOMFLY/underlying reversible-plasticity files are unchanged from the previous Run-2 patch.

@@ -26,22 +26,25 @@ def history_metric(rows,key,predicate=None):
 
 
 def plasticity_health_line(step,memory,config):
-    """Return severity and a PowerShell-friendly health summary."""
+    """Return severity and a PowerShell-friendly health/selectivity summary."""
     sat=float(memory.get('saturation_fraction',0.0))
     warning=float(config['warning_saturation_fraction'])
     critical=float(config['critical_saturation_fraction'])
     abort=float(config['abort_saturation_fraction'])
     extreme=float(memory.get('below_75_fraction',0.0))+float(memory.get('above_125_fraction',0.0))
+    mean_drift=abs(float(memory.get('mean_efficacy',1.0))-1.0)
     severity='OK'
-    if sat>=warning or extreme>=float(config['warning_extreme_fraction']):severity='WARNING'
-    if sat>=critical or extreme>=float(config['critical_extreme_fraction']):severity='CRITICAL'
-    if sat>=abort or extreme>=float(config['abort_extreme_fraction']):severity='COLLAPSE'
+    if sat>=warning or extreme>=float(config['warning_extreme_fraction']) or mean_drift>=float(config['warning_mean_drift']):severity='WARNING'
+    if sat>=critical or extreme>=float(config['critical_extreme_fraction']) or mean_drift>=float(config['critical_mean_drift']):severity='CRITICAL'
+    if sat>=abort or extreme>=float(config['abort_extreme_fraction']) or mean_drift>=float(config['abort_mean_drift']):severity='COLLAPSE'
     line=(f'PLASTICITY {severity} | step {step:,} | mean {memory["mean_efficacy"]:.3f} '
           f'| p10/med/p90 {memory["p10_efficacy"]:.3f}/{memory["median_efficacy"]:.3f}/{memory["p90_efficacy"]:.3f} '
-          f'| min/max {memory["minimum_efficacy"]:.3f}/{memory["maximum_efficacy"]:.3f} '
+          f'| spread {memory.get("efficacy_p90_p10_span",0.0):.4f} | min/max {memory["minimum_efficacy"]:.3f}/{memory["maximum_efficacy"]:.3f} '
+          f'| credit p10/med/p90 {memory.get("credit_exposure_p10",0.0):.2f}/{memory.get("credit_exposure_median",0.0):.2f}/{memory.get("credit_exposure_p90",0.0):.2f} '
+          f'| updates {memory.get("credit_update_events_p10",0.0):.0f}/{memory.get("credit_update_events_median",0.0):.0f}/{memory.get("credit_update_events_p90",0.0):.0f} '
           f'| changed {memory["changed_edges"]:,}/{memory["plastic_edges"]:,} '
           f'| floor {memory["floor_fraction"]:.1%} | ceiling {memory["ceiling_fraction"]:.1%} '
-          f'| saturated {sat:.1%} | outside 0.75-1.25 {extreme:.1%}')
+          f'| saturated {sat:.1%} | mean-drift {mean_drift:.1%} | outside 0.75-1.25 {extreme:.1%}')
     return severity,line
 
 
@@ -106,6 +109,22 @@ def panel(state,limit,episode_reward,metrics,parts,config):
     window=config['dashboard']['reward_rolling_average_episodes']
     recent=completed[-window:]
     progress_values=[normalized_progress_from_history(r) for r in recent]
+    # Dashboard learning curve: each point is the final combined behavioral
+    # performance score for one completed episode (the sum of the existing
+    # per-tick task-score components).  This is evaluation telemetry only; it
+    # is deliberately separate from the signed plastic teaching signal.
+    performance_history=[float(r.get('reward',0.0)) for r in completed]
+    performance_episodes=[int(r.get('episode',i+1)) for i,r in enumerate(completed)]
+    performance_rolling=[]
+    for i in range(len(performance_history)):
+        performance_rolling.append(average(performance_history[max(0,i-window+1):i+1]))
+    learning_curve={
+        'episodes':performance_episodes,
+        'performance':performance_history,
+        'rolling':performance_rolling,
+        'success':[bool(r.get('success',False)) for r in completed],
+        'window':window,
+    }
     behavior_rolling={
         'normalized_target_progress':average(progress_values),
         'aim_within_30_fraction':history_metric(recent,'aim_within_30_fraction'),
@@ -127,7 +146,8 @@ def panel(state,limit,episode_reward,metrics,parts,config):
         'mean_cumulative_latest':mean_cumulative_rewards[-1] if mean_cumulative_rewards else 0.,
         'mean_cumulative_rolling':average(mean_cumulative_rewards[-window:]),
         'mean_cumulative_mean':average(mean_cumulative_rewards),
-        'behavior_rolling':behavior_rolling,'rolling_window':window}
+        'behavior_rolling':behavior_rolling,'rolling_window':window,
+        'learning_curve':learning_curve}
 
 
 def evaluation(env,checkpoint,config,game_config,count,record=False,output=None,preview=True,activity_mode='spikes',voltage_smoothing_ms=80.0):
@@ -173,8 +193,8 @@ def evaluation(env,checkpoint,config,game_config,count,record=False,output=None,
 
 
 def validate(c):
-    t=c['training'];e=c['environment'];p=c['plasticity']
-    if p['model']!='gamma1-centered-signed-v2':raise ValueError('Run 2 requires gamma1-centered-signed-v2')
+    t=c['training'];e=c['environment'];p=c['plasticity'];q=c['teaching']
+    if p['model']!='gamma1-selective-signed-v3':raise ValueError('Run 2C requires gamma1-selective-signed-v3')
     for k in ('total_steps','max_steps_per_episode','evaluation_episodes'):
         if type(t[k]) is not int or t[k]<=0:raise ValueError(f'{k} must be a positive integer')
     for k in ('checkpoint_every_steps','evaluate_every_steps'):
@@ -183,12 +203,16 @@ def validate(c):
     ints=('pulse_ticks','cooldown_ticks','health_check_every_steps')
     if any(type(p[k]) is not int or p[k]<0 for k in ints):raise ValueError('Pulse/cooldown/health cadence must be nonnegative integers')
     if p['pulse_ticks']<=0 or p['health_check_every_steps']<=0:raise ValueError('Pulse and health cadence must be positive')
-    if not (p['eta']>=0 and p['current']>=0 and p['eligibility_tau_ms']>0 and p['eligibility_reference_hz']>0 and p['eligibility_gate_hz']>=0 and p['recovery_tau_seconds']>0):raise ValueError('Invalid plasticity rate/time parameters')
+    if not (p['eta']>=0 and p['current']>=0 and 0<p['eligibility_tau_ms']<p['eligibility_baseline_tau_ms'] and p['eligibility_reference_hz']>0 and p['eligibility_gate_hz']>=0 and 0<p['eligibility_winner_fraction']<=1 and type(p['eligibility_max_kcs']) is int and p['eligibility_max_kcs']>0 and p['eligibility_activity_floor']>=0 and p['recovery_tau_seconds']>0):raise ValueError('Invalid selective plasticity rate/time parameters')
     if not (0<p['minimum_fraction']<1<p['maximum_fraction'] and p['max_log_update_per_event']>0):raise ValueError('Invalid plasticity bounds')
-    if not (p['teaching_deadband']>=0 and p['teaching_scale']>0 and p['positive_gain']>=0 and p['negative_gain']>=0):raise ValueError('Invalid teaching-signal parameters')
+    if q['model']!='balanced-raw-delta-v1':raise ValueError('Run 2B requires balanced-raw-delta-v1 teaching')
+    if not (q['angle_scale_deg']>0 and q['distance_scale_blocks']>0 and q['progress_scale']>0):raise ValueError('Teaching normalization scales must be positive')
+    if not all(q[k]>=0 for k in ('angle_weight','distance_weight','progress_weight','crosshair_weight','success_weight')):raise ValueError('Teaching component weights must be nonnegative')
+    if not 0<=q['deadband']<=1:raise ValueError('Teaching deadband must be in [0,1]')
     if not (0<=p['aversive_signal_threshold']<=1):raise ValueError('aversive_signal_threshold must be in [0,1]')
     if not (0<=p['warning_saturation_fraction']<=p['critical_saturation_fraction']<=p['abort_saturation_fraction']<=1):raise ValueError('Invalid plasticity saturation alarm thresholds')
     if not (0<=p['warning_extreme_fraction']<=p['critical_extreme_fraction']<=p['abort_extreme_fraction']<=1):raise ValueError('Invalid plasticity drift alarm thresholds')
+    if not (0<=p['warning_mean_drift']<=p['critical_mean_drift']<=p['abort_mean_drift']<=1):raise ValueError('Invalid mean-drift alarm thresholds')
     if type(p['abort_on_collapse']) is not bool:raise ValueError('abort_on_collapse must be boolean')
     if c['dashboard']['reward_rolling_average_episodes']<1:raise ValueError('Rolling window must be positive')
     SustainedAttack(c['attack'])
@@ -233,7 +257,7 @@ def main():
             'kernel':fly.brain.build,'native_runtime':getattr(fly.brain,'runtime_build',fly.brain.build),'circuit':fly.brain.circuit['report'],
             'initial_weight_sha256':fly.initial_weights,
             'upstream_weight_sha256_before_visual_adapter':fly.brain.pre_visual_weight_sha256,
-            'positive_reward':'Signed external teaching gate potentiates recently eligible KC->MBON11 edges; experimental, not a claimed reconstructed appetitive DAN pathway',
+            'positive_reward':'Signed external teaching updates only the strongest transient KC pattern above each KC baseline; experimental credit assignment, not a claimed reconstructed appetitive DAN pathway',
             'sensory_input':'Minecraft RGB -> DOOMFLY v6 visual adapter: R1-R6 luminance + inferred R8p blue/R8y green; existing R8->aMe12 sign correction',
             'visual_model':fly.brain.visual_report})
     state={'step':0,'episode':0,'history':[],'best_eval':None,'next_eval':c['training']['evaluate_every_steps'],'in_episode':False,'rng':rng.bit_generator.state}
@@ -255,7 +279,7 @@ def main():
         selected=cp.save(run,fly,state,c,'baseline')
     cp.write_json(root/'latest.json',{'checkpoint':str(selected)})
     cp.write_json(run/'reward-history.json',state['history'])
-    print(f'RUN 2 | REVERSIBLE SIGNED PLASTICITY | positive + negative teaching | {run}',flush=True)
+    print(f'RUN 2C | SELECTIVE SIGNED PLASTICITY | transient competitive KC credit | balanced raw-delta teaching | {run}',flush=True)
     env=None;rec=None
     metrics=open(run/f'metrics-{stamp}.jsonl','w',encoding='utf-8')
     try:
@@ -264,6 +288,7 @@ def main():
             start=randomized_start(rng,c['environment']);state['rng']=rng.bit_generator.state
             obs=reset_episode(env,start);fly.reset_episode()
             attack=SustainedAttack(c['attack']);motion=EpisodeMotionStats();episode=state['episode']+1;begin=state['step'];reward=0.;cumulative_reward_sum=0.;hits=0
+            teach_counts={'positive':0,'negative':0,'neutral':0}
             state['in_episode']=True
             # The final budget window may contain several early successes: record
             # all candidates so the actual final episode is guaranteed footage.
@@ -278,12 +303,27 @@ def main():
                 obs=env.step(action)[0];after=observe(obs,start['target'])
                 behavior=motion.update(before,after,action)
                 value,parts=reward_components(before,after,c['reward']);reward+=value;cumulative_reward_sum+=reward;hits+=after['on_target']
-                teach,teach_raw=teaching_signal(parts,c['plasticity']);reinforcement=fly.reinforce(teach);state['step']+=1
-                p=panel(state,target,reward,after,parts,c);p.update(episode_step=tick+1, motor=motor_panel(control,action,attack,game_config), behavior=behavior);fly.training=p
+                teach,teach_raw,teach_detail=teaching_signal(before,after,c['teaching'])
+                reinforcement=fly.reinforce(teach)
+                if teach>0:teach_counts['positive']+=1
+                elif teach<0:teach_counts['negative']+=1
+                else:teach_counts['neutral']+=1
+                state['step']+=1
+                p=panel(state,target,reward,after,parts,c)
+                p.update(episode_step=tick+1, motor=motor_panel(control,action,attack,game_config), behavior=behavior,
+                    teaching={'signal':teach,'raw':teach_raw,**teach_detail}, teaching_counts=teach_counts.copy(),
+                    reinforcement=reinforcement, plastic_edges=int(len(fly.brain.circuit['edges'])),
+                    aversive_active=bool(neural.get('aversive_applied',False)),
+                    aversive_current=float(neural.get('aversive_current',0.0)))
+                fly.training=p
                 mean_cumulative_reward=cumulative_reward_sum/max(1,tick+1)
                 state['partial_episode']={'episode':episode,'start_step':begin,'end_step':state['step'],'reward':reward,'mean_cumulative_reward':mean_cumulative_reward,'start':start,'steps':tick+1,'run':str(run),'checkpoint':str(selected),'rolling_reward':p['rolling'],**behavior}
                 state['attack']={'accumulator':attack.accumulator,'remaining':attack.remaining}
-                row={'step':state['step'],'episode':episode,'reward':value,'episode_reward':reward,'mean_cumulative_reward':mean_cumulative_reward,'components':parts,'teaching_raw':teach_raw,'teaching_signal':teach,'reinforcement':reinforcement,'state':after,'action':action,'reinforcement_pending_ticks':fly.pending_ticks,'behavior':behavior,**neural}
+                row={'step':state['step'],'episode':episode,'reward':value,'episode_reward':reward,'mean_cumulative_reward':mean_cumulative_reward,
+                    'components':parts,'teaching_raw':teach_raw,'teaching_signal':teach,
+                    'teaching_components':teach_detail['components'],'teaching_deltas':teach_detail['deltas'],
+                    'teaching_counts':teach_counts.copy(),'reinforcement':reinforcement,'state':after,'action':action,
+                    'reinforcement_pending_ticks':fly.pending_ticks,'behavior':behavior,**neural}
                 if state['step']%20==0:row['plasticity']=fly.brain.memory()
                 health_every=c['plasticity']['health_check_every_steps']
                 if state['step']%health_every==0:
@@ -291,27 +331,28 @@ def main():
                     severity,health_line=plasticity_health_line(state['step'],health,c['plasticity'])
                     print(health_line,flush=True)
                     if severity in ('WARNING','CRITICAL','COLLAPSE'):
-                        print('*** PLASTICITY ALARM: bounded KC->MBON11 weights are accumulating at a limit. Inspect before committing more compute. ***',flush=True)
+                        print('*** PLASTICITY ALARM: KC->MBON11 memory is drifting or saturating beyond the configured health range. Inspect before committing more compute. ***',flush=True)
                     if severity=='COLLAPSE' and c['plasticity']['abort_on_collapse']:
                         raise RuntimeError('Plasticity collapse threshold reached; abort_on_collapse=true')
                 metrics.write(json.dumps(row)+'\n')
                 if rec:rec.write(fly,rgb,preview_rgb,control,action,before,after,tick,neural,p)
                 if state['step']%20==0:
                     metrics.flush();best='n/a' if state['best_eval'] is None else f'{state["best_eval"]:.0%}'
-                    print(f'Step {state["step"]:,} / {target:,} | Ep {episode} | MeanCumR {mean_cumulative_reward:+.3f} | Teach {teach:+.2f} | Prog {behavior["normalized_target_progress"]:+.0%} | Aim<30 {behavior["aim_within_30_fraction"]:.0%} | W aim/other {conditional_percent(behavior["forward_when_ahead_fraction"],behavior["ahead_ticks"])}/{conditional_percent(behavior["forward_when_not_ahead_fraction"],behavior["not_ahead_ticks"])} | Atk aim/other {conditional_percent(behavior["attack_when_ahead_fraction"],behavior["ahead_ticks"])}/{conditional_percent(behavior["attack_when_not_ahead_fraction"],behavior["not_ahead_ticks"])} | RollMean {p["mean_cumulative_rolling"]:+.3f} | Best {best}',flush=True)
+                    print(f'Step {state["step"]:,} / {target:,} | Ep {episode} | MeanCumR {mean_cumulative_reward:+.3f} | Teach {teach:+.2f} | TeachEv +{teach_counts["positive"]}/-{teach_counts["negative"]}/0{teach_counts["neutral"]} | Prog {behavior["normalized_target_progress"]:+.0%} | Aim<30 {behavior["aim_within_30_fraction"]:.0%} | W aim/other {conditional_percent(behavior["forward_when_ahead_fraction"],behavior["ahead_ticks"])}/{conditional_percent(behavior["forward_when_not_ahead_fraction"],behavior["not_ahead_ticks"])} | Atk aim/other {conditional_percent(behavior["attack_when_ahead_fraction"],behavior["ahead_ticks"])}/{conditional_percent(behavior["attack_when_not_ahead_fraction"],behavior["not_ahead_ticks"])} | RollMean {p["mean_cumulative_rolling"]:+.3f} | Best {best}',flush=True)
                 every=c['training']['checkpoint_every_steps']
                 if every and state['step']%every==0:
                     selected=cp.save(run,fly,state,c,f'step-{state["step"]:09d}')
                     cp.write_json(root/'latest.json',{'checkpoint':str(selected)})
                 if not after['target_present']:break
-            result={**state['partial_episode'],'success':not after['target_present'],'target_hit_rate':hits/(tick+1),'final_distance':after['distance'],'angular_error':after['angle'],'plasticity':fly.brain.memory(),'censored':False,**motion.summary()}
+            result={**state['partial_episode'],'success':not after['target_present'],'target_hit_rate':hits/(tick+1),'final_distance':after['distance'],'angular_error':after['angle'],
+                'teaching_counts':teach_counts.copy(),'plasticity':fly.brain.memory(),'censored':False,**motion.summary()}
             state['history'].append(result);state['episode']=episode;state['in_episode']=False
             completed=[r['reward'] for r in state['history'] if not r.get('censored',False)]
             window=c['dashboard']['reward_rolling_average_episodes']
             result['rolling_reward']=average(completed[-window:])
             mean_cumulative_completed=[float(r['mean_cumulative_reward']) for r in state['history'] if not r.get('censored',False) and 'mean_cumulative_reward' in r]
             result['rolling_mean_cumulative_reward']=average(mean_cumulative_completed[-window:])
-            print(f'Episode {episode} done | MeanCumR {result["mean_cumulative_reward"]:+.3f} | Prog {result["normalized_target_progress"]:+.0%} | Aim<30 {result["aim_within_30_fraction"]:.0%} | W aim/other {conditional_percent(result["forward_when_ahead_fraction"],result["ahead_ticks"])}/{conditional_percent(result["forward_when_not_ahead_fraction"],result["not_ahead_ticks"])} | Atk aim/other {conditional_percent(result["attack_when_ahead_fraction"],result["ahead_ticks"])}/{conditional_percent(result["attack_when_not_ahead_fraction"],result["not_ahead_ticks"])} | Break {result["max_break_progress"]:.0%} | {"SUCCESS" if result["success"] else "timeout"}',flush=True)
+            print(f'Episode {episode} done | PerfScore {result["reward"]:+.3f} | MeanCumR {result["mean_cumulative_reward"]:+.3f} | Prog {result["normalized_target_progress"]:+.0%} | Aim<30 {result["aim_within_30_fraction"]:.0%} | W aim/other {conditional_percent(result["forward_when_ahead_fraction"],result["ahead_ticks"])}/{conditional_percent(result["forward_when_not_ahead_fraction"],result["not_ahead_ticks"])} | Atk aim/other {conditional_percent(result["attack_when_ahead_fraction"],result["ahead_ticks"])}/{conditional_percent(result["attack_when_not_ahead_fraction"],result["not_ahead_ticks"])} | Break {result["max_break_progress"]:.0%} | {"SUCCESS" if result["success"] else "timeout"}',flush=True)
             if rec:rec.close(result);rec=None
             cp.write_json(run/'reward-history.json',state['history'])
             every=c['training']['evaluate_every_steps']

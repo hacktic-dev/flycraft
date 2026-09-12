@@ -32,18 +32,14 @@
     "hold_steps": 6
   },
   "plasticity": {
-    "model": "gamma1-centered-signed-v2",
+    "model": "gamma1-selective-signed-v3",
     "eta": 0.001,
-    "eligibility_tau_ms": 300.0,
-    "eligibility_reference_hz": 10.0,
+    "eligibility_tau_ms": 120.0,
+    "eligibility_reference_hz": 8.0,
     "recovery_tau_seconds": 1800.0,
     "minimum_fraction": 0.5,
     "maximum_fraction": 1.5,
     "max_log_update_per_event": 0.002,
-    "teaching_deadband": 0.002,
-    "teaching_scale": 0.02,
-    "positive_gain": 1.0,
-    "negative_gain": 1.0,
     "current": 8.0,
     "pulse_ticks": 2,
     "cooldown_ticks": 4,
@@ -52,11 +48,18 @@
     "warning_saturation_fraction": 0.02,
     "critical_saturation_fraction": 0.1,
     "abort_saturation_fraction": 0.35,
-    "abort_on_collapse": false,
+    "abort_on_collapse": true,
     "eligibility_gate_hz": 1.0,
     "warning_extreme_fraction": 0.1,
     "critical_extreme_fraction": 0.25,
-    "abort_extreme_fraction": 0.6
+    "abort_extreme_fraction": 0.6,
+    "eligibility_baseline_tau_ms": 1500.0,
+    "eligibility_winner_fraction": 0.25,
+    "eligibility_max_kcs": 256,
+    "eligibility_activity_floor": 0.02,
+    "warning_mean_drift": 0.1,
+    "critical_mean_drift": 0.2,
+    "abort_mean_drift": 0.3
   },
   "recording": {
     "record_every_episodes": 20,
@@ -68,5 +71,17 @@
   },
   "dashboard": {
     "reward_rolling_average_episodes": 20
+  },
+  "teaching": {
+    "model": "balanced-raw-delta-v1",
+    "angle_scale_deg": 15.0,
+    "distance_scale_blocks": 0.25,
+    "progress_scale": 0.1,
+    "angle_weight": 0.25,
+    "distance_weight": 0.35,
+    "progress_weight": 0.75,
+    "crosshair_weight": 0.2,
+    "success_weight": 1.0,
+    "deadband": 0.03
   }
 }

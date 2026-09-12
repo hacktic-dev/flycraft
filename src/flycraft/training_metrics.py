@@ -39,24 +39,61 @@ def reward_components(before, after, config):
     return sum(parts.values()), parts
 
 
-def teaching_signal(parts, config):
-    """Convert task outcome components into a bounded signed teaching signal.
+def teaching_signal(before, after, config):
+    """Balanced signed teaching, independent of the behavioural reward score.
 
-    The generic per-step penalty is intentionally excluded: time pressure is a
-    score/evaluation concern, not a reason to punish whatever KC pattern happened
-    to be active on nearly every control tick. Positive task deltas therefore
-    produce positive plastic reinforcement and negative task deltas produce
-    aversive plastic reinforcement.
+    Reward weights are deliberately allowed to be asymmetric because they are an
+    evaluation metric. Plastic teaching instead starts from raw physical changes:
+    an equal improvement and worsening of aim, distance, or break progress produce
+    equal-and-opposite component values. The final signal is bounded to [-1,+1].
+
+    Positive teaching is an explicit experimental FlyCraft signal, not a claim of
+    a reconstructed appetitive dopamine pathway. Strong negative teaching may also
+    trigger the separately modeled PPL101 aversive pulse in ``LearningFly``.
     """
-    raw = sum(float(v) for k, v in parts.items() if k != 'step')
-    deadband = float(config['teaching_deadband'])
-    scale = float(config['teaching_scale'])
-    if abs(raw) <= deadband:
-        return 0.0, raw
-    magnitude = math.tanh((abs(raw) - deadband) / scale)
-    gain = float(config['positive_gain'] if raw > 0 else config['negative_gain'])
-    signal = math.copysign(min(1.0, magnitude * gain), raw)
-    return signal, raw
+    for name in ('angle_scale_deg','distance_scale_blocks','progress_scale'):
+        if float(config[name]) <= 0:
+            raise ValueError(f'Invalid teaching scale: {name}')
+    if float(config['deadband']) < 0:
+        raise ValueError('Teaching deadband must be non-negative')
+
+    success = bool(before['target_present'] and not after['target_present'])
+    angle_delta_deg = math.degrees(float(before['angle']) - float(after['angle']))
+    distance_delta = float(before['distance']) - float(after['distance'])
+    effective_progress = 1.0 if success else float(after['progress'])
+    progress_delta = effective_progress - float(before['progress'])
+
+    acquired = bool(after['on_target'] and not before['on_target'])
+    # Do not call the target disappearing after a successful break a crosshair loss.
+    lost = bool(before['on_target'] and not after['on_target'] and not success)
+    crosshair_transition = int(acquired) - int(lost)
+
+    components = {
+        'angle': float(config['angle_weight']) * math.tanh(
+            angle_delta_deg / float(config['angle_scale_deg'])),
+        'distance': float(config['distance_weight']) * math.tanh(
+            distance_delta / float(config['distance_scale_blocks'])),
+        'breaking_progress': float(config['progress_weight']) * math.tanh(
+            progress_delta / float(config['progress_scale'])),
+        'crosshair': float(config['crosshair_weight']) * crosshair_transition,
+        'success': float(config['success_weight']) if success else 0.0,
+    }
+    raw = float(sum(components.values()))
+    signal = math.tanh(raw)
+    if abs(signal) < float(config['deadband']):
+        signal = 0.0
+
+    detail = {
+        'components': components,
+        'deltas': {
+            'angle_deg': float(angle_delta_deg),
+            'distance_blocks': float(distance_delta),
+            'breaking_progress': float(progress_delta),
+            'crosshair_transition': int(crosshair_transition),
+            'success': bool(success),
+        },
+    }
+    return float(signal), raw, detail
 
 
 class SustainedAttack:
