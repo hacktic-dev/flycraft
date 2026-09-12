@@ -1,0 +1,16 @@
+{
+  "learning": false,
+  "seed": 41027,
+  "width": 640,
+  "height": 480,
+  "port": 8023,
+  "neural_ms_per_tick": 50.0,
+  "yaw_gain": -1.75,
+  "max_yaw_degrees": 10.5,
+  "forward_threshold": 0.5,
+  "attack_enabled": true,
+  "debug_every": 100,
+  "target_block": "minecraft:red_concrete",
+  "target_x": 3,
+  "target_z": 9
+}

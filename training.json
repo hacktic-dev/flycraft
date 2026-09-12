@@ -1,0 +1,40 @@
+{
+  "training": {
+    "total_steps": 100000,
+    "max_steps_per_episode": 200,
+    "checkpoint_every_steps": 10000,
+    "evaluate_every_steps": 1000,
+    "evaluation_episodes": 5,
+    "seed": 41027
+  },
+  "environment": {
+    "randomize_player_position": true,
+    "randomize_tree_position": true,
+    "randomize_yaw": true,
+    "min_tree_distance": 2.0,
+    "max_tree_distance": 7.0,
+    "player_spawn_radius": 8.0
+  },
+  "reward": {
+    "angle_improvement": 0.05,
+    "angle_worsening": -0.025,
+    "distance_improvement": 0.10,
+    "distance_worsening": -0.05,
+    "crosshair_on_log": 0.02,
+    "breaking_progress_gain": 2.0,
+    "breaking_progress_loss": -1.0,
+    "log_broken": 20.0,
+    "step_penalty": -0.001
+  },
+  "attack": {"threshold": 1.0, "decay": 0.85, "hold_steps": 6},
+  "plasticity": {"model": "gamma1-eligibility-ltd-v1", "eta": 0.001, "current": 30.0, "pulse_ticks": 4, "negative_threshold": 0.001},
+  "recording": {
+    "record_every_episodes": 10,
+    "record_first_episode": true,
+    "record_final_episode": true,
+    "record_minecraft": true,
+    "record_dashboard": true,
+    "record_activity": true
+  },
+  "dashboard": {"reward_rolling_average_episodes": 20}
+}

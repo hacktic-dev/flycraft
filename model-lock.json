@@ -1,0 +1,11 @@
+{
+  "doomfly_commit": "71ecf53d78eaffaf1a57ed7b0ccf5d458abc9f33",
+  "craftground_inspected_commit": "18eba01a87a8481bc4fbb54b42fee1428c0c3719",
+  "craftground_package": "2.7.4",
+  "craftground_runtime_mc121": "0.1.0",
+  "model": "original fixed-weight MaleCNS baseline",
+  "neurons": 166700,
+  "edges": 25582938,
+  "weight_sha256": "d95171c2d59cfe3ebef2e5bd52be779b8f74754d718fc8941a93b8f2921c632b",
+  "kernel_source_sha256": "f755334c260758eaece63d3ab78e6496b2db60942a0a89a196e9f02a047e3586"
+}
