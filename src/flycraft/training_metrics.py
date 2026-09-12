@@ -39,6 +39,26 @@ def reward_components(before, after, config):
     return sum(parts.values()), parts
 
 
+def teaching_signal(parts, config):
+    """Convert task outcome components into a bounded signed teaching signal.
+
+    The generic per-step penalty is intentionally excluded: time pressure is a
+    score/evaluation concern, not a reason to punish whatever KC pattern happened
+    to be active on nearly every control tick. Positive task deltas therefore
+    produce positive plastic reinforcement and negative task deltas produce
+    aversive plastic reinforcement.
+    """
+    raw = sum(float(v) for k, v in parts.items() if k != 'step')
+    deadband = float(config['teaching_deadband'])
+    scale = float(config['teaching_scale'])
+    if abs(raw) <= deadband:
+        return 0.0, raw
+    magnitude = math.tanh((abs(raw) - deadband) / scale)
+    gain = float(config['positive_gain'] if raw > 0 else config['negative_gain'])
+    signal = math.copysign(min(1.0, magnitude * gain), raw)
+    return signal, raw
+
+
 class SustainedAttack:
     """Only neural attack events influence the accumulator; no target telemetry."""
     def __init__(self, config):

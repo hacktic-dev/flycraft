@@ -1,8 +1,8 @@
-"""DOOMFLY v6 visual-input adapter layered onto the v1 memory brain.
+"""DOOMFLY v6 visual-input adapter layered onto FlyCraft Run-2 memory.
 
 This intentionally ports only the visual-input assumptions from DOOMFLY's
 ``doom_learning_v6.visual`` at the repository revision pinned by FlyCraft.
-The learning rule remains FlyCraft's existing gamma1-eligibility-ltd-v1 rule.
+The learning rule is FlyCraft's reversible gamma1-centered-signed-v2 rule.
 
 Visual assumptions inherited from DOOMFLY v6:
 - keep the existing R1-R6 luminance input unchanged;
@@ -20,7 +20,8 @@ import time
 
 import numpy as np
 
-import doom_learning.brain as v1
+import doom_learning.brain as legacy
+from doom_learning.flycraft_v2 import CenteredMemoryBrain
 from doom.game import retinal_samples
 from doom_learning.common import annotations, digest
 from doom_learning_v6.visual import projection as doomfly_v6_projection
@@ -30,8 +31,8 @@ def _sha256(array):
     return hashlib.sha256(np.asarray(array).tobytes()).hexdigest()
 
 
-class R8VisualMemoryBrain(v1.MemoryBrain):
-    """v1 plasticity brain with the DOOMFLY v6 RGB/R8 visual adapter."""
+class R8VisualMemoryBrain(CenteredMemoryBrain):
+    """Run-2 reversible plasticity brain with the DOOMFLY v6 RGB/R8 adapter."""
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -78,13 +79,11 @@ class R8VisualMemoryBrain(v1.MemoryBrain):
         }
 
     def step(self, luminance, duration_ms, *, learning=False, stimulation=None, lamina_bias=12.):
-        """v1 neural step with DOOMFLY-v6-compatible per-neuron stimulation.
+        """Neural step plus Run-2 eligibility/recovery bookkeeping.
 
-        The original gamma1-v1 MemoryBrain only accepts one scalar current per
-        stimulation target set. DOOMFLY v6's R8 adapter supplies one current
-        amplitude per R8 receptor, so accept either a scalar or an array whose
-        shape matches the target indices. The neural integration and v1 LTD rule
-        are otherwise unchanged.
+        Native v1 LTD is always disabled here. The native kernel is retained only
+        for full-graph neural integration; signed reversible plasticity is applied
+        by CenteredMemoryBrain after each <=10 ms visual/neural bin.
         """
         light=np.asarray(luminance)
         if light.shape!=(len(self.retina),) or not np.isfinite(light).all():
@@ -118,13 +117,15 @@ class R8VisualMemoryBrain(v1.MemoryBrain):
             *[getattr(self,k).ctypes.data for k in ['counts','active','active_flag','nactive','last']],
             c['kc_mask'].ctypes.data,c['dan_index'].ctypes.data,self.eligibility.ctypes.data,self.eligibility_last.ctypes.data,
             len(c['edges']),c['edges'].ctypes.data,c['pre'].ctypes.data,self.baseline_plastic.ctypes.data,c['gain'].ctypes.data,
-            self.eta,v1.PARAMETERS['eligibility_tau_ms'],v1.PARAMETERS['minimum_efficacy_fraction'],int(learning),
+            self.eta,legacy.PARAMETERS['eligibility_tau_ms'],legacy.PARAMETERS['minimum_efficacy_fraction'],0,
             self.modulation.ctypes.data,self.modulation_last.ctypes.data)
         elapsed=time.perf_counter()-start
         self.cursor=int(clock[0])
         self.sim_ms=self.cursor*self.dt
         self.total_spikes+=int(self.counts.sum())
-        return self.counts.copy(),elapsed
+        counts=self.counts.copy()
+        self.after_neural_bin(counts,duration_ms,learning=learning)
+        return counts,elapsed
 
     def rgb_step(self, frame, duration_ms, **kwargs):
         """Advance from one RGB frame using DOOMFLY v6's visual-input method."""

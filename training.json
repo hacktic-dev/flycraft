@@ -18,7 +18,7 @@
   "reward": {
     "angle_improvement": 0.05,
     "angle_worsening": -0.025,
-    "distance_improvement": 0.10,
+    "distance_improvement": 0.1,
     "distance_worsening": -0.05,
     "crosshair_on_log": 0.02,
     "breaking_progress_gain": 2.0,
@@ -26,8 +26,38 @@
     "log_broken": 20.0,
     "step_penalty": -0.001
   },
-  "attack": {"threshold": 1.0, "decay": 0.85, "hold_steps": 6},
-  "plasticity": {"model": "gamma1-eligibility-ltd-v1", "eta": 0.001, "current": 30.0, "pulse_ticks": 4, "negative_threshold": 0.001},
+  "attack": {
+    "threshold": 1.0,
+    "decay": 0.85,
+    "hold_steps": 6
+  },
+  "plasticity": {
+    "model": "gamma1-centered-signed-v2",
+    "eta": 0.001,
+    "eligibility_tau_ms": 300.0,
+    "eligibility_reference_hz": 10.0,
+    "recovery_tau_seconds": 1800.0,
+    "minimum_fraction": 0.5,
+    "maximum_fraction": 1.5,
+    "max_log_update_per_event": 0.002,
+    "teaching_deadband": 0.002,
+    "teaching_scale": 0.02,
+    "positive_gain": 1.0,
+    "negative_gain": 1.0,
+    "current": 8.0,
+    "pulse_ticks": 2,
+    "cooldown_ticks": 4,
+    "aversive_signal_threshold": 0.35,
+    "health_check_every_steps": 100,
+    "warning_saturation_fraction": 0.02,
+    "critical_saturation_fraction": 0.1,
+    "abort_saturation_fraction": 0.35,
+    "abort_on_collapse": false,
+    "eligibility_gate_hz": 1.0,
+    "warning_extreme_fraction": 0.1,
+    "critical_extreme_fraction": 0.25,
+    "abort_extreme_fraction": 0.6
+  },
   "recording": {
     "record_every_episodes": 20,
     "record_first_episode": true,
@@ -36,5 +66,7 @@
     "record_dashboard": true,
     "record_activity": true
   },
-  "dashboard": {"reward_rolling_average_episodes": 20}
+  "dashboard": {
+    "reward_rolling_average_episodes": 20
+  }
 }
