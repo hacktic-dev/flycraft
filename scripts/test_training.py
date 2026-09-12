@@ -26,8 +26,13 @@ assert reward_components(b,b,c['reward'])[0]==-.001
 assert reward_components(b,{**b,'progress':0},c['reward'])[1]['breaking_progress']==-.6
 assert reward_components(b,{**b,'target_present':False,'progress':0},c['reward'])[1]['success']==20
 attack=SustainedAttack(c['attack']);assert [attack.step(x) for x in [True]+[False]*7]==[True]*6+[False]*2
-assert [i for i in range(1,22) if should_record(i,c['recording'])]==[1,10,20]
+assert [i for i in range(1,22) if should_record(i,{**c['recording'],'record_every_episodes':10})]==[1,10,20]
 fly=LearningFly(c['plasticity']);brain=fly.brain
+assert len(brain.r8)==811, f'Expected DOOMFLY v6 mapped R8 count 811, got {len(brain.r8)}'
+assert int((brain.r8_channel==2).sum())+int((brain.r8_channel==1).sum())==811
+assert len(brain.corrected_edges)>0
+assert brain.pre_visual_weight_sha256==json.loads((ROOT/'model-lock.json').read_text(encoding='utf-8-sig'))['weight_sha256']
+print('PASS DOOMFLY v6 visual adapter | R8=',len(brain.r8),'corrected R8->aMe12 edges=',len(brain.corrected_edges),flush=True)
 # Controlled physiological assay: KC excitation is test-only, never gameplay input.
 brain.step(np.zeros(len(brain.retina)),50,learning=True,stimulation=(brain.circuit['kc'][:5],30.))
 before=brain.weight[brain.circuit['edges']].copy()

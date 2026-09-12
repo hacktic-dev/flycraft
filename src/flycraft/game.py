@@ -46,6 +46,18 @@ def pixels(obs,c):
         raise RuntimeError(f'Invalid cropped Minecraft RGB: {rgb.shape}, expected {(target_h,target_w,3)}')
     return np.ascontiguousarray(rgb)
 
+def preview_pixels(obs):
+    """Return Minecraft's uncropped render for human-facing preview/recording.
+
+    This is intentionally separate from :func:`pixels`, which returns the
+    centered 4:3 crop used as the fly's neural sensory input.
+    """
+    rgb=np.asarray(obs['rgb'])
+    if rgb.ndim!=3 or rgb.shape[2]!=3 or rgb.dtype!=np.uint8:
+        raise RuntimeError(f'Invalid Minecraft preview RGB: {rgb.shape} {rgb.dtype}')
+    return np.ascontiguousarray(rgb)
+
+
 def telemetry(obs):
     full=obs['full']
     names=['x','y','z','yaw','pitch','world_time','game_time','health']

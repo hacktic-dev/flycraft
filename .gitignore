@@ -5,3 +5,6 @@ artifacts/
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# Local source backup; keep the archive out of versioned source.
+/Minecraft Fruit Fly.7z

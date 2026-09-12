@@ -1,9 +1,9 @@
 {
   "training": {
     "total_steps": 100000,
-    "max_steps_per_episode": 200,
+    "max_steps_per_episode": 400,
     "checkpoint_every_steps": 10000,
-    "evaluate_every_steps": 1000,
+    "evaluate_every_steps": 5000,
     "evaluation_episodes": 5,
     "seed": 41027
   },
@@ -29,7 +29,7 @@
   "attack": {"threshold": 1.0, "decay": 0.85, "hold_steps": 6},
   "plasticity": {"model": "gamma1-eligibility-ltd-v1", "eta": 0.001, "current": 30.0, "pulse_ticks": 4, "negative_threshold": 0.001},
   "recording": {
-    "record_every_episodes": 10,
+    "record_every_episodes": 20,
     "record_first_episode": true,
     "record_final_episode": true,
     "record_minecraft": true,

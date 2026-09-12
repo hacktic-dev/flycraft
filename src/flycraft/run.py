@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image,ImageDraw
 from .brain import FrozenFly
-from .game import make_game,pixels,telemetry,map_action,initialize_game
+from .game import make_game,pixels,preview_pixels,telemetry,map_action,initialize_game
 ROOT=Path(__file__).resolve().parents[2]
 
 def main():
@@ -47,7 +47,9 @@ def main():
         env=make_game(c)
         obs=initialize_game(env,c)
         rgb=pixels(obs,c)
+        preview_rgb=preview_pixels(obs)
         Image.fromarray(rgb).save(out/'first-frame.png')
+        Image.fromarray(preview_rgb).save(out/'first-frame-preview.png')
         summary['initial_game']=telemetry(obs)
         if record_trajectory:
             from .trajectory import TrajectoryWriter
@@ -65,6 +67,7 @@ def main():
         while not args.steps or steps<args.steps:
             tick_start=time.perf_counter()
             rgb=pixels(obs,c)
+            preview_rgb=preview_pixels(obs)
             control,neural=fly.step(rgb,c['neural_ms_per_tick'])
             if activity_writer: activity_writer.write(fly.activity_bins)
             action=map_action(control,c)
@@ -79,7 +82,7 @@ def main():
             log.write(json.dumps(row)+'\n')
             if writer:
                 from .visuals import fit
-                output_frame=np.asarray(fit(Image.fromarray(rgb)))
+                output_frame=np.asarray(fit(Image.fromarray(preview_rgb)))
                 for _ in range(3):writer.send(output_frame)
             if args.debug and steps%c['debug_every']==0:
                 Image.fromarray(rgb).save(out/f'rgb-{steps:07d}.png')
@@ -91,7 +94,7 @@ def main():
                 view.save(out/f'retina-{steps:07d}.png')
                 (out/f'debug-{steps:07d}.json').write_text(json.dumps(row,indent=2))
             steps+=1;obs=next_obs
-            if visuals and (args.record_visuals or not args.no_preview): visuals.update(rgb,control,steps-1)
+            if visuals and (args.record_visuals or not args.no_preview): visuals.update(rgb,control,steps-1,preview_rgb=preview_rgb)
             if steps%20==0:
                 log.flush()
                 print(f'LEARNING: OFF | tick={steps} brain={fly.brain.sim_ms/1000:.2f}s yaw={action["camera_yaw"]:.3f} forward={action["forward"]} attack={action["attack"]}',flush=True)
@@ -115,6 +118,7 @@ def main():
             if 'obs' in locals():
                 summary['final_game']=telemetry(obs)
                 Image.fromarray(pixels(obs,c)).save(out/'last-frame.png')
+                Image.fromarray(preview_pixels(obs)).save(out/'last-frame-preview.png')
             (out/'summary.json').write_text(json.dumps(summary,indent=2))
             print(f'Saved {out}',flush=True)
 if __name__=='__main__':main()

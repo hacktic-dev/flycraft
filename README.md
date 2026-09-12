@@ -11,6 +11,11 @@ This README is primarily a practical reference for running, resuming, evaluating
 
 ---
 
+### Minecraft aspect ratio / neural crop
+
+FlyCraft asks CraftGround for a **16:9 (854x480 at the default 480 px height) raw render** and then center-crops it to the configured **640x480 4:3** view before retinal sampling and sensory hashing. Human-facing previews, dashboard game panes, and game videos use the uncropped 16:9 render. This avoids the CraftGround/Windows path that otherwise compresses a 16:9 render horizontally into a nominal 640x480 frame. The crop is geometric only: it adds no game-state information and only the corrected center crop is passed to `retinal_samples`; the wider game preview is for viewers only.
+
+
 ## 1. Quick command cheat sheet
 
 Run all commands from the project root in **PowerShell**.
@@ -30,6 +35,9 @@ Run all commands from the project root in **PowerShell**.
 
 # Start a completely new training lineage from the original untrained fly
 .\train.ps1 -Mode Fresh -Steps 100000 -CheckpointEvery 10000 -NoPreview
+
+# Same training run, but render recorded/preview dashboards with both membrane voltage and spikes
+.\train.ps1 -Mode Fresh -Steps 100000 -CheckpointEvery 10000 -ActivityMode Combined -VoltageSmoothingMs 80 -NoPreview
 
 # Continue the latest checkpoint of the latest run for another 50,000 steps
 .\train.ps1 -Mode Resume -Checkpoint latest -Steps 50000 -NoPreview
@@ -1106,4 +1114,17 @@ After updating an existing checkout with this patch, apply the runtime launcher 
 ```
 
 Close any already-running Minecraft client before relaunching.
+
+
+### Activity mode during training
+
+`train.ps1` accepts the same neural visualization modes as the baseline viewer:
+
+```powershell
+.\train.ps1 -Mode Fresh -Steps 1000 -ActivityMode Spikes
+.\train.ps1 -Mode Fresh -Steps 1000 -ActivityMode Voltage
+.\train.ps1 -Mode Fresh -Steps 1000 -ActivityMode Combined -VoltageSmoothingMs 80
+```
+
+`Combined` renders the smoothed cyan/purple membrane-voltage layer together with the gold spike layer in live previews and recorded training dashboards. It is display-only: it does not alter neural state or learning. With `-NoPreview`, the setting still applies to episodes for which `record_dashboard` is enabled.
 

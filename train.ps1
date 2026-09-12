@@ -5,11 +5,14 @@ param(
     [int]$Steps,
     [int]$CheckpointEvery,
     [int]$Episodes,
+    [ValidateSet('Spikes','Voltage','Combined')]
+    [string]$ActivityMode='Spikes',
+    [double]$VoltageSmoothingMs=80,
     [switch]$NoPreview
 )
 . "$PSScriptRoot\env.ps1"
 $env:OPENBLAS_NUM_THREADS='1'
-$arguments=@('-m','flycraft.train','--mode',$Mode.ToLower(),'--checkpoint',$Checkpoint)
+$arguments=@('-m','flycraft.train','--mode',$Mode.ToLower(),'--checkpoint',$Checkpoint,'--activity-mode',$ActivityMode.ToLower(),'--voltage-smoothing-ms',"$VoltageSmoothingMs")
 if ($Config) { $arguments+=@('--config',$Config) }
 if ($PSBoundParameters.ContainsKey('Steps')) { $arguments+=@('--steps',"$Steps") }
 if ($PSBoundParameters.ContainsKey('CheckpointEvery')) { $arguments+=@('--checkpoint-every',"$CheckpointEvery") }

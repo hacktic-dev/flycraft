@@ -19,12 +19,26 @@ def font(size=18):
         if Path(p).exists(): return ImageFont.truetype(p,size)
     return ImageFont.load_default()
 
-def fit(im,size=HD):
-    result=Image.new('RGB',size,BG)
+def fit(im,size=HD,bg=BG):
+    result=Image.new('RGB',size,bg)
     scale=min(size[0]/im.width,size[1]/im.height)
     resized=im.resize((round(im.width*scale),round(im.height*scale)),Image.Resampling.LANCZOS)
     result.paste(resized,((size[0]-resized.width)//2,(size[1]-resized.height)//2))
     return result
+
+def fill_crop(im,size):
+    """Fill *size* without distortion by center-cropping the source aspect ratio."""
+    target_ratio=size[0]/size[1]
+    source_ratio=im.width/im.height
+    if source_ratio>target_ratio:
+        crop_w=round(im.height*target_ratio)
+        x=(im.width-crop_w)//2
+        im=im.crop((x,0,x+crop_w,im.height))
+    elif source_ratio<target_ratio:
+        crop_h=round(im.width/target_ratio)
+        y=(im.height-crop_h)//2
+        im=im.crop((0,y,im.width,y+crop_h))
+    return im.resize(size,Image.Resampling.LANCZOS)
 
 class Visuals:
     def __init__(self,fly,out,record=False,preview=True,layout=None,playback=False,activity_mode='spikes',voltage_smoothing_ms=80.0):
@@ -62,7 +76,7 @@ class Visuals:
             np.savez_compressed(self.out/'neuron-layout.npz',ids=fly.brain.ids,superclass=fly.brain.superclass,xyz_nm=self.xyz,position_source=self.position_source,retina_indices=fly.brain.retina,retina_uv=fly.brain.uv)
             if (anatomy.CACHE/'anatomy.json').exists():shutil.copy2(anatomy.CACHE/'anatomy.json',self.out/'anatomy.json')
             for p in anatomy.CACHE.glob('skeleton-*.npz'):shutil.copy2(p,self.out/p.name)
-            (self.out/'visuals.json').write_text(json.dumps({'fps':60 if record else 20,'resolution':list(HD),'spike_bin_hz':60,'simulation_dt_ms':.1,'native_steps_per_bin_pattern':[167,167,166],'trail_decay_ms':250,'layout':'actual MaleCNS EM anatomical XYZ in nm; soma, tosoma or actual skeleton vertex','positioned_neurons':int(self.located.sum()),'missing_positions':int((~self.located).sum()),'retina':'actual upstream linear-luminance samples; inferred eye projection','spike_data':'activity-60hz.jsonl.gz; source MaleCNS body IDs; frame starts at t=frame/60; interval [t,t+1/60)','video_sampling':'game and retina remain 20 Hz; frames held for three 60 Hz output frames; no new visual input to brain','activity_mode':self.activity_mode,'voltage_display_smoothing_ms':self.voltage_smoothing_ms,'voltage_display_note':'display-only exponential smoothing of membrane voltage; simulation state is unchanged','voltage_recording':'when -RecordActivity is used, voltage-20hz/ stores quantized membrane snapshots at the existing 50 ms control boundary','learning':False},indent=2))
+            (self.out/'visuals.json').write_text(json.dumps({'fps':60 if record else 20,'resolution':list(HD),'spike_bin_hz':60,'simulation_dt_ms':.1,'native_steps_per_bin_pattern':[167,167,166],'trail_decay_ms':250,'layout':'actual MaleCNS EM anatomical XYZ in nm; soma, tosoma or actual skeleton vertex','positioned_neurons':int(self.located.sum()),'missing_positions':int((~self.located).sum()),'retina':'R1-R6 linear-luminance projection; learning mode also drives DOOMFLY-v6 inferred R8p blue/R8y green inputs','spike_data':'activity-60hz.jsonl.gz; source MaleCNS body IDs; frame starts at t=frame/60; interval [t,t+1/60)','video_sampling':'game and retina remain 20 Hz; frames held for three 60 Hz output frames; no new visual input to brain','activity_mode':self.activity_mode,'voltage_display_smoothing_ms':self.voltage_smoothing_ms,'voltage_display_note':'display-only exponential smoothing of membrane voltage; simulation state is unchanged','voltage_recording':'when -RecordActivity is used, voltage-20hz/ stores quantized membrane snapshots at the existing 50 ms control boundary','learning':False},indent=2))
 
     def project(self,xyz,size):
         p=(np.asarray(xyz)-self.center)/self.extent
@@ -89,11 +103,28 @@ class Visuals:
 
     def retina_image(self):
         retina=Image.new('RGB',(640,480),BG);d=ImageDraw.Draw(retina)
+        # R1-R6: the original luminance samples, unchanged.
         for uv,v in zip(self.fly.brain.uv,self.fly.samples):
             x,y=uv*[639,407]+[0,48];b=int(np.clip(v,0,1)*255)
             d.ellipse((x-1.2,y-1.2,x+1.2,y+1.2),fill=(b,b,b))
-        d.text((16,10),'RETINA | 3,335 luminance samples',font=font(20),fill=FG)
-        d.text((16,458),'Actual input samples; inferred eye projection',font=font(14),fill=CYAN)
+
+        if hasattr(self.fly.brain,'r8'):
+            # R8: show the actual v6 low-pass color input at each inferred eye
+            # position. R8p samples blue; R8y samples green. A small base
+            # brightness keeps receptor identity visible even in dark pixels,
+            # while the input value controls the rest of the intensity.
+            lights=np.asarray(self.fly.brain.r8_light,dtype=float)
+            channels=np.asarray(self.fly.brain.r8_channel)
+            for uv,v,ch in zip(self.fly.brain.r8_uv,lights,channels):
+                x,y=uv*[639,407]+[0,48]
+                level=int(55+200*np.clip(v,0,1))
+                color=(35,90,level) if ch==2 else (35,level,90)
+                d.ellipse((x-1.8,y-1.8,x+1.8,y+1.8),fill=color)
+            d.text((16,10),f'RETINA | 3,335 R1-R6 + {len(self.fly.brain.r8):,} R8 color inputs',font=font(20),fill=FG)
+            d.text((16,458),'gray = R1-R6 luminance   blue = R8p   green = R8y',font=font(14),fill=CYAN)
+        else:
+            d.text((16,10),'RETINA | 3,335 luminance samples',font=font(20),fill=FG)
+            d.text((16,458),'Actual input samples; inferred eye projection',font=font(14),fill=CYAN)
         return retina
 
     def scene(self,map_width,map_height):
@@ -234,104 +265,129 @@ class Visuals:
             if e.unicode=='-':self.zoom=max(.2,self.zoom/1.15)
             if e.key==self.pg.K_SPACE:self.paused=not self.paused
 
-    def show(self,rgb,retina,activity,dashboard):
+    def show(self,rgb,retina,activity,dashboard,preview_rgb=None):
         self.events()
         if not self.pg:return
-        im={1:fit(Image.fromarray(rgb)),2:fit(retina),3:activity,4:dashboard}[self.mode]
+        game_rgb=rgb if preview_rgb is None else preview_rgb
+        im={1:fit(Image.fromarray(game_rgb)),2:fit(retina),3:activity,4:dashboard}[self.mode]
         surf=self.pg.image.frombuffer(im.tobytes(),im.size,'RGB')
         w,h=self.screen.get_size();scale=min(w/im.width,h/im.height)
         size=(int(im.width*scale),int(im.height*scale));self.screen.fill(BG)
         self.screen.blit(self.pg.transform.smoothscale(surf,size),((w-size[0])//2,(h-size[1])//2));self.pg.display.flip()
 
-    def render_frame(self,rgb,retina,counts,control,frame,t,duration,write=False):
+    def render_frame(self,rgb,retina,counts,control,frame,t,duration,write=False,preview_rgb=None):
         self.trail=np.maximum(counts,self.trail*np.exp(-duration/.25))
+        game_rgb=rgb if preview_rgb is None else preview_rgb
         self.update_display_voltage(duration)
         activity=self.activity_image(counts,control,t,duration)
         dashboard=Image.new('RGB',HD,BG)
         if getattr(self.fly,'training',None):
-            # Keep the original 50/50 dashboard columns. Minecraft RGB is 4:3
-            # (640x480), while its dashboard frame is 960x540 (16:9), so fit()
-            # letterboxes/pillarboxes the image inside that unchanged frame.
-            # This preserves the game's true aspect ratio without stretching or
-            # cropping and without changing the retina/brain panel widths.
-            dashboard.paste(fit(Image.fromarray(rgb),(960,540)),(0,0))
+            # Keep the original 50/50 dashboard columns. The Minecraft pane is
+            # 960x540 (16:9), but the full sensory frame is preserved: scale it
+            # down to fit without cropping or stretching and letterbox/pillarbox
+            # the unused area in black. This is display-only; the fly still gets
+            # the original sensory frame unchanged.
+            dashboard.paste(fit(Image.fromarray(game_rgb),(960,540),(0,0,0)),(0,0))
             dashboard.paste(fit(retina,(960,432)),(960,0))
             dashboard.paste(self.activity_image(counts,control,t,duration,(960,648),clean=True),(960,432))
-            panel_canvas=Image.new('RGB',HD,BG)
+            panel_canvas=Image.new('RGB',(960,540),BG)
             self.training_panel(panel_canvas,self.fly.training)
-            dashboard.paste(fit(panel_canvas.crop((0,450,800,1080)),(960,540)),(0,540))
+            dashboard.paste(panel_canvas,(0,540))
             borders=ImageDraw.Draw(dashboard)
             borders.line((960,0,960,1080),fill=(40,53,69),width=2)
             borders.line((0,540,960,540),fill=(40,53,69),width=2)
             borders.line((960,432,1920,432),fill=(40,53,69),width=2)
         else:
-            dashboard.paste(fit(Image.fromarray(rgb),(960,540)),(0,0));dashboard.paste(fit(retina,(960,540)),(960,0))
+            dashboard.paste(fit(Image.fromarray(game_rgb),(960,540)),(0,0));dashboard.paste(fit(retina,(960,540)),(960,0))
             dashboard.paste(self.activity_image(counts,control,t,duration,(1920,540)),(0,540))
         if write:
             for name,im in [('retina.mp4',fit(retina)),('neural-activity.mp4',activity),('dashboard.mp4',dashboard)]:self.video(name,im)
         if frame==0 or frame%300==0:
             fit(retina).save(self.out/'retina-preview.png');activity.save(self.out/'activity-preview.png');dashboard.save(self.out/'dashboard-preview.png')
-        self.show(rgb,retina,activity,dashboard)
+        self.show(rgb,retina,activity,dashboard,preview_rgb=game_rgb)
         return activity
 
     def training_panel(self,im,p):
-        d=ImageDraw.Draw(im);x=22;y=785
-        d.rectangle((0,450,799,1079),fill=BG)
+        """Render the 960x540 training panel directly at full left-column width."""
+        d=ImageDraw.Draw(im)
+        width,height=im.size
+        d.rectangle((0,0,width-1,height-1),fill=BG)
         best='--' if p['best_eval'] is None else f'{p["best_eval"]:.0%}'
-        d.text((22,458),f'EP {p["episode"]}   /   {p["step"]:,} of {p["total"]:,} steps',font=font(20),fill=FG)
-        d.text((490,458),f'REWARD {p["reward"]:+.2f}',font=font(24),fill=(245,195,78))
-        d.text((22,492),'NEURONS',font=font(16),fill=FG)
-        d.text((264,492),'FIXED DECODER',font=font(16),fill=FG)
-        d.text((586,492),'GAME INPUT',font=font(16),fill=FG)
+
+        # Header / column labels.
+        d.text((22,7),f'EP {p["episode"]}   /   {p["step"]:,} of {p["total"]:,} steps',font=font(18),fill=FG)
+        reward_text=f'REWARD {p["reward"]:+.2f}'
+        reward_font=font(21)
+        reward_box=d.textbbox((0,0),reward_text,font=reward_font)
+        d.text((width-22-(reward_box[2]-reward_box[0]),7),reward_text,font=reward_font,fill=(245,195,78))
+        d.text((22,38),'NEURONS',font=font(14),fill=FG)
+        d.text((309,38),'FIXED DECODER',font=font(14),fill=FG)
+        d.text((725,38),'GAME INPUT',font=font(14),fill=FG)
+
         m=p.get('motor')
         if m:
-            def meter(xx,yy,value,color,width=145,maximum=100):
-                d.rounded_rectangle((xx,yy,xx+width,yy+7),radius=3,fill=(37,49,65))
-                fill=int(width*np.clip(value/maximum,0,1))
-                if fill:d.rounded_rectangle((xx,yy,xx+fill,yy+7),radius=3,fill=color)
+            def meter(xx,yy,value,color,width_px=180,maximum=100):
+                d.rounded_rectangle((xx,yy,xx+width_px,yy+6),radius=3,fill=(37,49,65))
+                fill_w=int(width_px*np.clip(value/maximum,0,1))
+                if fill_w:d.rounded_rectangle((xx,yy,xx+fill_w,yy+6),radius=3,fill=color)
             def path(yy,enabled,color):
                 col=color if enabled else (54,65,80)
-                d.line((228,yy,555,yy),fill=col,width=3)
-                d.polygon([(555,yy),(543,yy-6),(543,yy+6)],fill=col)
+                d.line((302,yy,680,yy),fill=col,width=3)
+                d.polygon([(680,yy),(668,yy-6),(668,yy+6)],fill=col)
             cyan=CYAN;green=(91,225,165);gold=(245,195,78)
-            # Node labels are measured neural channels; these lines represent
-            # the engineered decoder, not reconstructed synaptic connections.
-            for top,color in ((520,cyan),(596,green),(672,gold)):
-                d.rounded_rectangle((18,top,780,top+70),radius=12,outline=(41,54,72),width=1)
-            d.text((30,524),'DNp20 L / R  Hz',font=font(18),fill=cyan)
-            meter(30,552,m['left_hz'],cyan,maximum=100)
-            meter(30,573,m['right_hz'],cyan,maximum=100)
-            d.text((181,544),f'{m["left_hz"]:.0f}',font=font(14),fill=FG)
-            d.text((181,566),f'{m["right_hz"]:.0f}',font=font(14),fill=FG)
-            path(559,abs(m['yaw'])>0,cyan)
-            d.text((261,524),'rate difference -> camera',font=font(16),fill=FG)
-            d.text((274,566),f'x0.12  then  x{m["yaw_gain"]:g}',font=font(14),fill=FG)
+            card_left,card_right=18,width-18
+            for top in (58,124,190):
+                d.rounded_rectangle((card_left,top,card_right,top+59),radius=11,outline=(41,54,72),width=1)
+
+            # Turn card.
+            d.text((30,62),'DNp20 L / R  Hz',font=font(16),fill=cyan)
+            meter(30,87,m['left_hz'],cyan,maximum=100)
+            meter(30,105,m['right_hz'],cyan,maximum=100)
+            d.text((220,80),f'{m["left_hz"]:.0f}',font=font(13),fill=FG)
+            d.text((220,99),f'{m["right_hz"]:.0f}',font=font(13),fill=FG)
+            path(92,abs(m['yaw'])>0,cyan)
+            d.text((326,62),'rate difference -> camera',font=font(15),fill=FG)
+            d.text((342,99),f'x0.12  then  x{m["yaw_gain"]:g}',font=font(13),fill=FG)
             direction='LEFT' if m['yaw']<0 else 'RIGHT' if m['yaw']>0 else 'STILL'
-            d.text((576,526),direction,font=font(23),fill=cyan)
-            d.text((576,558),f'{abs(m["yaw"]):.2f} deg/tick',font=font(18),fill=FG)
-            d.text((30,602),'DNpe017 L+R Hz',font=font(18),fill=green)
-            meter(30,636,m['forward_hz'],green)
-            d.text((181,626),f'{m["forward_hz"]:.0f}',font=font(14),fill=FG)
-            path(635,m['walking'],green)
-            d.text((264,601),'rate -> forward threshold',font=font(16),fill=FG)
-            d.text((272,643),f'{m["forward"]:.1f} > {m["forward_threshold"]:g}',font=font(14),fill=FG)
-            d.rounded_rectangle((579,608,627,655),radius=7,fill=green if m['walking'] else (37,49,65))
-            d.text((593,616),'W',font=font(26),fill=BG if m['walking'] else FG)
-            d.text((639,620),'HELD' if m['walking'] else 'OFF',font=font(22),fill=green if m['walking'] else FG)
-            d.text((30,678),'DNpe017 spikes',font=font(18),fill=gold)
+            d.text((704,64),direction,font=font(20),fill=cyan)
+            d.text((704,94),f'{abs(m["yaw"]):.2f} deg/tick',font=font(16),fill=FG)
+
+            # Forward card.
+            d.text((30,128),'DNpe017 L+R Hz',font=font(16),fill=green)
+            meter(30,157,m['forward_hz'],green)
+            d.text((220,150),f'{m["forward_hz"]:.0f}',font=font(13),fill=FG)
+            path(157,m['walking'],green)
+            d.text((326,128),'rate -> forward threshold',font=font(15),fill=FG)
+            d.text((342,165),f'{m["forward"]:.1f} > {m["forward_threshold"]:g}',font=font(13),fill=FG)
+            d.rounded_rectangle((708,139,750,181),radius=7,fill=green if m['walking'] else (37,49,65))
+            d.text((720,146),'W',font=font(23),fill=BG if m['walking'] else FG)
+            d.text((766,149),'HELD' if m['walking'] else 'OFF',font=font(19),fill=green if m['walking'] else FG)
+
+            # Attack card.
+            d.text((30,194),'DNpe017 spikes',font=font(16),fill=gold)
             for j in range(min(12,m['spikes'])):
-                d.line((33+j*14,730,33+j*14,710),fill=gold,width=3)
-            d.text((181,711),str(m['spikes']),font=font(16),fill=FG)
-            path(711,m['attacking'],gold)
-            d.text((264,677),'pulse -> accumulate -> hold',font=font(16),fill=FG)
-            meter(270,730,m['accumulator'],gold,width=130,maximum=m['threshold'])
-            d.text((413,720),f'{m["hold_left"]} ticks',font=font(14),fill=FG)
-            d.rounded_rectangle((582,681,620,734),radius=13,outline=gold,width=2)
-            if m['attacking']:d.rectangle((587,685,600,706),fill=gold)
-            d.line((601,683,601,708),fill=gold,width=1)
-            d.text((638,697),'HELD' if m['attacking'] else 'OFF',font=font(22),fill=gold if m['attacking'] else FG)
-        d.text((22,754),f'{p["distance"]:.1f}m to log  |  aim {np.degrees(p["angle"]):.0f} deg  |  break {p["progress"]:.0%}',font=font(17),fill=FG)
-        d.text((22,1049),f'Rolling {p["rolling"]:+.2f}   Mean {p["mean"]:+.2f}   Best eval {best}',font=font(17),fill=CYAN)
+                d.line((33+j*14,238,33+j*14,220),fill=gold,width=3)
+            d.text((220,219),str(m['spikes']),font=font(14),fill=FG)
+            path(223,m['attacking'],gold)
+            d.text((326,194),'pulse -> accumulate -> hold',font=font(15),fill=FG)
+            meter(342,235,m['accumulator'],gold,width_px=160,maximum=m['threshold'])
+            d.text((516,225),f'{m["hold_left"]} ticks',font=font(13),fill=FG)
+            d.rounded_rectangle((713,202,748,245),radius=11,outline=gold,width=2)
+            if m['attacking']:d.rectangle((718,206,730,223),fill=gold)
+            d.line((731,204,731,225),fill=gold,width=1)
+            d.text((766,213),'HELD' if m['attacking'] else 'OFF',font=font(19),fill=gold if m['attacking'] else FG)
+
+        d.text((22,258),f'{p["distance"]:.1f}m to log  |  aim {np.degrees(p["angle"]):.0f} deg  |  break {p["progress"]:.0%}',font=font(15),fill=FG)
+        behavior=p.get('behavior')
+        if behavior:
+            def cpct(value,count):return '--' if not count else f'{value:.0%}'
+            d.text((22,278),
+                f'PROG {behavior["normalized_target_progress"]:+.0%}   AIM<30 {behavior["aim_within_30_fraction"]:.0%}   '
+                f'W aim/other {cpct(behavior["forward_when_ahead_fraction"],behavior["ahead_ticks"])}/{cpct(behavior["forward_when_not_ahead_fraction"],behavior["not_ahead_ticks"])}   '
+                f'ATK aim/other {cpct(behavior["attack_when_ahead_fraction"],behavior["ahead_ticks"])}/{cpct(behavior["attack_when_not_ahead_fraction"],behavior["not_ahead_ticks"])}   '
+                f'TURN {behavior["turn_bias_deg_per_tick"]:+.2f} deg/t',
+                font=font(12),fill=(160,174,190))
+
         # Draw every control tick, including the first episode; 60 Hz video
         # repeats do not create additional reward samples.
         key=p['episode']
@@ -341,11 +397,12 @@ class Visuals:
         if not self.reward_trace:self.reward_trace.append((max(0,tick-1),0.))
         if self.reward_trace[-1][0]!=tick:self.reward_trace.append((tick,p['reward']))
         else:self.reward_trace[-1]=(tick,p['reward'])
-        def graph(title,ys,xs,top,height=40,xlabel='step',style='line',bounds=None,empty='Waiting for data'):
-            left=x+60;right=770;bottom=top+height
-            d.text((x,top-20),title,font=font(15),fill=FG)
+
+        def graph(title,ys,xs,top,height_px=34,xlabel='step',style='line',bounds=None,empty='Waiting for data'):
+            label_x=22;left=74;right=width-24;bottom=top+height_px
+            d.text((label_x,top-18),title,font=font(13),fill=FG)
             if not len(ys):
-                d.text((left,top+12),empty,font=font(14),fill=(160,174,190));return
+                d.text((left,top+9),empty,font=font(13),fill=(160,174,190));return
             a=np.asarray(ys,dtype=float);xx=np.asarray(xs,dtype=float)
             if bounds is None:
                 low=min(0.,float(a.min()));high=max(0.,float(a.max()))
@@ -354,53 +411,58 @@ class Visuals:
                 low,high=bounds
             if high<=low:high=low+.02
             for value in (low,0.,high):
-                yy=bottom-(value-low)/(high-low)*height
+                yy=bottom-(value-low)/(high-low)*height_px
                 d.line((left,yy,right,yy),fill=(42,55,72))
-                d.text((x,yy-7),f'{value:.2f}',font=font(12),fill=FG)
+                d.text((label_x,yy-6),f'{value:.2f}',font=font(10),fill=FG)
             d.line((left,top,left,bottom),fill=FG)
             span=max(1.,float(xx[-1]-xx[0]))
-            # A 100k-step run only has hundreds of episodes, so keep every
-            # completed-episode point. Long live traces are thinned to screen width.
             if style=='points':
                 indices=np.arange(len(a))
             else:
-                indices=np.unique(np.linspace(0,len(a)-1,min(len(a),700)).astype(int))
-            pts=[(left+(xx[i]-xx[0])/span*(right-left),bottom-(a[i]-low)/(high-low)*height) for i in indices]
+                indices=np.unique(np.linspace(0,len(a)-1,min(len(a),900)).astype(int))
+            pts=[(left+(xx[i]-xx[0])/span*(right-left),bottom-(a[i]-low)/(high-low)*height_px) for i in indices]
             if style=='line' and len(pts)>1:d.line(pts,fill=CYAN if 'ROLLING' in title else (245,195,78),width=2)
             if style=='points':
-                # Completed-episode rewards are discrete samples, but joining
-                # them makes the run's trajectory much easier to read at a glance.
                 if len(pts)>1:d.line(pts,fill=(245,195,78),width=2)
                 for px,py in pts:d.ellipse((px-2,py-2,px+2,py+2),fill=(245,195,78))
             elif pts:
                 px,py=pts[-1];d.ellipse((px-3,py-3,px+3,py+3),fill=CYAN if 'ROLLING' in title else (245,195,78))
-            d.text((left,bottom+2),str(int(xx[0])),font=font(12),fill=FG)
-            d.text((right-145,bottom+2),f'{xlabel} {int(xx[-1])}',font=font(12),fill=FG)
+            d.text((left,bottom+1),str(int(xx[0])),font=font(10),fill=FG)
+            end_text=f'{xlabel} {int(xx[-1])}'
+            end_box=d.textbbox((0,0),end_text,font=font(10))
+            d.text((right-(end_box[2]-end_box[0]),bottom+1),end_text,font=font(10),fill=FG)
 
-        # Three distinct training views:
-        # 1) cumulative reward evolving live within the current episode,
-        # 2) one point per completed episode,
-        # 3) the smoothed rolling average across completed episodes.
         graph('CURRENT EPISODE | CUMULATIVE REWARD',
-            [v for t,v in self.reward_trace],[t for t,v in self.reward_trace],y+28,height=40)
-        values=np.asarray(p['history'],dtype=float)
+            [v for t,v in self.reward_trace],[t for t,v in self.reward_trace],318,height_px=28)
+        values=np.asarray(p.get('mean_cumulative_history',[]),dtype=float)
+        episodes=np.asarray(p.get('mean_cumulative_episodes',[]),dtype=float)
         win=p['rolling_window'];ix=np.arange(len(values));sums=np.r_[0,np.cumsum(values)]
-        smooth=(sums[ix+1]-sums[np.maximum(0,ix+1-win)])/np.minimum(ix+1,win)
+        smooth=(sums[ix+1]-sums[np.maximum(0,ix+1-win)])/np.minimum(ix+1,win) if len(values) else np.asarray([],dtype=float)
         episode_bounds=None
         if len(values):
             low=min(0.,float(values.min()),float(smooth.min()));high=max(0.,float(values.max()),float(smooth.max()))
-            pad=max(.01,(high-low)*.1);episode_bounds=(low-pad,high+pad)
-        graph('COMPLETED EPISODE REWARD',values,ix+1,y+105,height=40,xlabel='episode',style='points',bounds=episode_bounds,empty='No completed episodes yet')
-        graph(f'ROLLING AVERAGE | LAST {win} EPISODES',smooth,ix+1,y+182,height=40,xlabel='episode',style='line',bounds=episode_bounds,empty='No completed episodes yet')
+            pad=max(.001,(high-low)*.1);episode_bounds=(low-pad,high+pad)
+        graph('COMPLETED EPISODE | MEAN CUMULATIVE REWARD',values,episodes,391,height_px=28,xlabel='episode',style='points',bounds=episode_bounds,empty='No reconstructed episode means yet')
+        graph(f'ROLLING MEAN CUMULATIVE REWARD | LAST {win} EPISODES',smooth,episodes,464,height_px=28,xlabel='episode',style='line',bounds=episode_bounds,empty='No reconstructed episode means yet')
 
-    def update(self,rgb,control,frame):
+        br=p.get('behavior_rolling',{})
+        def rollpct(key):
+            value=br.get(key)
+            return '--' if value is None else f'{value:.0%}'
+        footer=(f'LAST {p["rolling_window"]}  meanR {p.get("mean_cumulative_rolling",0.):+.3f}   '
+                f'prog {rollpct("normalized_target_progress")}   aim<30 {rollpct("aim_within_30_fraction")}   '
+                f'W aim {rollpct("forward_when_ahead_fraction")}   ATK aim {rollpct("attack_when_ahead_fraction")}   '
+                f'success {rollpct("success_rate")}   eval {best}')
+        d.text((22,518),footer,font=font(12),fill=CYAN)
+
+    def update(self,rgb,control,frame,preview_rgb=None):
         retina=self.retina_image()
         bins=getattr(self.fly,'activity_bins',None)
         if bins is None:
-            self.render_frame(rgb,retina,self.fly.last_counts,control,frame,(frame+1)/20,.05)
+            self.render_frame(rgb,retina,self.fly.last_counts,control,frame,(frame+1)/20,.05,preview_rgb=preview_rgb)
         else:
             for k,counts in enumerate(bins):
-                self.render_frame(rgb,retina,counts,control,frame*3+k,(frame*3+k)/60,1/60,write=self.record)
+                self.render_frame(rgb,retina,counts,control,frame*3+k,(frame*3+k)/60,1/60,write=self.record,preview_rgb=preview_rgb)
 
     def close(self):
         for w in self.writers.values():w.close()
