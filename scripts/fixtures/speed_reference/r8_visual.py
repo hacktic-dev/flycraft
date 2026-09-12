@@ -128,27 +128,6 @@ class R8VisualMemoryBrain(v1.MemoryBrain):
 
     def rgb_step(self, frame, duration_ms, **kwargs):
         """Advance from one RGB frame using DOOMFLY v6's visual-input method."""
-        # Sample the held image once, but retain every 10 ms filter/current
-        # update and its original floating-point operation order.
-        cached = kwargs.pop('_visual_input', None)
-        samples = kwargs.pop('_retinal_samples', None)
-        if cached is None:
-            frame = np.asarray(frame)
-            if frame.ndim != 3 or frame.shape[2] != 3 or frame.dtype != np.uint8:
-                raise ValueError('RGB uint8 required')
-
-            h, w = frame.shape[:2]
-            x = np.minimum((self.r8_uv[:, 0] * (w - 1)).astype(int), w - 1)
-            y = np.minimum((self.r8_uv[:, 1] * (h - 1)).astype(int), h - 1)
-            values = frame[y, x, self.r8_channel].astype(np.float32) / 255.0
-            # Exact sRGB -> linear-light transfer used by DOOMFLY v6.
-            values = np.where(values <= .04045, values / 12.92, ((values + .055) / 1.055) ** 2.4)
-
-        else:
-            samples, values = cached
-
-        samples = retinal_samples(frame, self.uv) if samples is None else samples
-
         # This is deliberate: DOOMFLY v6 never lets one visual-current/filter
         # update span more than 10 ms, even when the game/control interval is
         # longer. The same Minecraft frame is held during these sub-intervals.
@@ -158,12 +137,23 @@ class R8VisualMemoryBrain(v1.MemoryBrain):
             wall = 0.0
             while ticks:
                 n = min(100, ticks)
-                counts, elapsed = self.rgb_step(frame, n * self.dt, _visual_input=(samples, values), **kwargs)
+                counts, elapsed = self.rgb_step(frame, n * self.dt, **kwargs)
                 total += counts
                 wall += elapsed
                 ticks -= n
             self.counts[:] = total
             return total, wall
+
+        frame = np.asarray(frame)
+        if frame.ndim != 3 or frame.shape[2] != 3 or frame.dtype != np.uint8:
+            raise ValueError('RGB uint8 required')
+
+        h, w = frame.shape[:2]
+        x = np.minimum((self.r8_uv[:, 0] * (w - 1)).astype(int), w - 1)
+        y = np.minimum((self.r8_uv[:, 1] * (h - 1)).astype(int), h - 1)
+        values = frame[y, x, self.r8_channel].astype(np.float32) / 255.0
+        # Exact sRGB -> linear-light transfer used by DOOMFLY v6.
+        values = np.where(values <= .04045, values / 12.92, ((values + .055) / 1.055) ** 2.4)
 
         steps = round(duration_ms / self.dt)
         self.r8_light += (1 - math.exp(-steps * self.dt / 10.0)) * (values - self.r8_light)
@@ -172,7 +162,7 @@ class R8VisualMemoryBrain(v1.MemoryBrain):
         pulses = [] if extra is None else list(extra) if isinstance(extra, list) else [extra]
         pulses.append((self.r8, 30 * self.r8_light / (.02 + self.r8_light)))
 
-        return self.step(samples, duration_ms, stimulation=pulses, **kwargs)
+        return self.step(retinal_samples(frame, self.uv), duration_ms, stimulation=pulses, **kwargs)
 
     def configuration_signature(self):
         return {

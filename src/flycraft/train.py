@@ -203,7 +203,7 @@ def main():
     fly=LearningFly(c['plasticity']);rng=np.random.default_rng(c['training']['seed'])
     if not (run/'model.json').exists():
         cp.write_json(run/'model.json',{'model':c['plasticity']['model'],'validated':False,
-            'kernel':fly.brain.build,'circuit':fly.brain.circuit['report'],
+            'kernel':fly.brain.build,'native_runtime':getattr(fly.brain,'runtime_build',fly.brain.build),'circuit':fly.brain.circuit['report'],
             'initial_weight_sha256':fly.initial_weights,
             'upstream_weight_sha256_before_visual_adapter':fly.brain.pre_visual_weight_sha256,
             'positive_reward':'metrics only',
