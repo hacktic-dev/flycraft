@@ -65,7 +65,11 @@ def telemetry(obs):
 
 def map_action(control,c):
     action=no_op_v2()
-    action['camera_yaw']=float(np.clip(control['turn']*c['yaw_gain'],-c['max_yaw_degrees'],c['max_yaw_degrees']))
+    # Bilateral steering already produces Minecraft degrees per control tick.
+    # Applying the legacy negative gain here would invert and amplify it twice.
+    direct=control.get('decoder',{}).get('turn_units')=='degrees_per_tick'
+    yaw=control['turn'] if direct else control['turn']*c['yaw_gain']
+    action['camera_yaw']=float(np.clip(yaw,-c['max_yaw_degrees'],c['max_yaw_degrees']))
     action['forward']=bool(control['forward']>c['forward_threshold'])
     action['attack']=bool(control['attack'] and c['attack_enabled'])
     return action

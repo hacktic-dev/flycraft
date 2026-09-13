@@ -85,5 +85,23 @@
     "crosshair_weight": 0.2,
     "success_weight": 1.0,
     "deadband": 0.03
+  },
+  "decoder": {
+    "mode": "balanced-bilateral-v1",
+    "neuron_type": "DNp20",
+    "left_reference_hz": 7.0184999999999995,
+    "right_reference_hz": 30.391683333333333,
+    "regularizer": 1.0,
+    "deadband": 0.05,
+    "max_yaw_deg_per_second": 120.0,
+    "polarity": 1,
+    "calibration": {
+      "image": "uniform RGB 128, 640x480",
+      "warmup_ticks": 20,
+      "measurement_ticks": 60,
+      "weights": "untrained baseline",
+      "model": "gamma1-fatigue-selective-signed-v4",
+      "source": "artifacts/decoder-calibration/neutral.json"
+    }
   }
 }

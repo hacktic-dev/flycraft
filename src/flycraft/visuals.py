@@ -358,12 +358,12 @@ class Visuals:
             for top in (58,124,190):
                 d.rounded_rectangle((card_left,top,card_right,top+59),radius=11,outline=(41,54,72),width=1)
 
-            d.text((30,62),'DNp20 L / R  Hz',font=font(16),fill=cyan)
+            d.text((30,62),f'{m.get("steering_type","DNp20")} L / R  Hz',font=font(16),fill=cyan)
             meter(30,87,m['left_hz'],cyan,maximum=100);meter(30,105,m['right_hz'],cyan,maximum=100)
             d.text((220,80),f'{m["left_hz"]:.0f}',font=font(13),fill=FG);d.text((220,99),f'{m["right_hz"]:.0f}',font=font(13),fill=FG)
             path(92,abs(m['yaw'])>0,cyan)
-            d.text((326,62),'rate difference -> camera',font=font(15),fill=FG)
-            d.text((342,99),f'x0.12  then  x{m["yaw_gain"]:g}',font=font(13),fill=FG)
+            d.text((326,62),f'L {m["left_normalized"]:.2f}x / R {m["right_normalized"]:.2f}x neutral' if m.get('steering_mode')=='balanced-bilateral-v1' else 'rate difference -> camera',font=font(15),fill=FG)
+            d.text((342,99),f'opponent {m["opponent"]:+.2f} -> degrees' if m.get('steering_mode')=='balanced-bilateral-v1' else f'x0.12  then  x{m["yaw_gain"]:g}',font=font(13),fill=FG)
             direction='LEFT' if m['yaw']<0 else 'RIGHT' if m['yaw']>0 else 'STILL'
             d.text((704,64),direction,font=font(20),fill=cyan);d.text((704,94),f'{abs(m["yaw"]):.2f} deg/tick',font=font(16),fill=FG)
 

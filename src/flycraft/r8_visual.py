@@ -2,7 +2,7 @@
 
 This intentionally ports only the visual-input assumptions from DOOMFLY's
 ``doom_learning_v6.visual`` at the repository revision pinned by FlyCraft.
-The learning rule is FlyCraft's selective gamma1-selective-signed-v3 rule.
+The learning rule is FlyCraft's fatigue-selective gamma1-fatigue-selective-signed-v4 rule.
 
 Visual assumptions inherited from DOOMFLY v6:
 - keep the existing R1-R6 luminance input unchanged;
@@ -21,7 +21,7 @@ import time
 import numpy as np
 
 import doom_learning.brain as legacy
-from doom_learning.flycraft_v3 import SelectiveMemoryBrain
+from doom_learning.flycraft_v4 import FatigueSelectiveMemoryBrain
 from doom.game import retinal_samples
 from doom_learning.common import annotations, digest
 from doom_learning_v6.visual import projection as doomfly_v6_projection
@@ -31,7 +31,7 @@ def _sha256(array):
     return hashlib.sha256(np.asarray(array).tobytes()).hexdigest()
 
 
-class R8VisualMemoryBrain(SelectiveMemoryBrain):
+class R8VisualMemoryBrain(FatigueSelectiveMemoryBrain):
     """Run-2 reversible plasticity brain with the DOOMFLY v6 RGB/R8 adapter."""
 
     def __init__(self, **kwargs):
@@ -83,7 +83,7 @@ class R8VisualMemoryBrain(SelectiveMemoryBrain):
 
         Native v1 LTD is always disabled here. The native kernel is retained only
         for full-graph neural integration; signed reversible plasticity is applied
-        by SelectiveMemoryBrain after each <=10 ms visual/neural bin.
+        by FatigueSelectiveMemoryBrain after each <=10 ms visual/neural bin.
         """
         light=np.asarray(luminance)
         if light.shape!=(len(self.retina),) or not np.isfinite(light).all():

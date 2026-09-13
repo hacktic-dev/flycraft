@@ -9,6 +9,7 @@ from .game import make_game,initialize_game,pixels,preview_pixels,map_action
 from .training_game import randomized_start,reset_episode,observe
 from .training_metrics import reward_components,teaching_signal,SustainedAttack,should_record,EpisodeMotionStats
 from . import training_checkpoints as cp
+from .decoder import validated_config,signature
 
 
 def average(values):return float(np.mean(values)) if len(values) else 0.
@@ -42,6 +43,7 @@ def plasticity_health_line(step,memory,config):
           f'| spread {memory.get("efficacy_p90_p10_span",0.0):.4f} | min/max {memory["minimum_efficacy"]:.3f}/{memory["maximum_efficacy"]:.3f} '
           f'| credit p10/med/p90 {memory.get("credit_exposure_p10",0.0):.2f}/{memory.get("credit_exposure_median",0.0):.2f}/{memory.get("credit_exposure_p90",0.0):.2f} '
           f'| updates {memory.get("credit_update_events_p10",0.0):.0f}/{memory.get("credit_update_events_median",0.0):.0f}/{memory.get("credit_update_events_p90",0.0):.0f} '
+          f'| KCsel {memory.get("kc_selection_events_p10",0.0):.0f}/{memory.get("kc_selection_events_median",0.0):.0f}/{memory.get("kc_selection_events_p90",0.0):.0f} '
           f'| changed {memory["changed_edges"]:,}/{memory["plastic_edges"]:,} '
           f'| floor {memory["floor_fraction"]:.1%} | ceiling {memory["ceiling_fraction"]:.1%} '
           f'| saturated {sat:.1%} | mean-drift {mean_drift:.1%} | outside 0.75-1.25 {extreme:.1%}')
@@ -91,7 +93,10 @@ def motor_panel(control,action,attack,game_config):
     for r in control['readouts']:
         rates[(r['type'],r['side'])]=r['rate_hz']
         if r['type']=='DNpe017':spikes+=r['spikes']
-    return {'right_hz':rates.get(('DNp20','R'),0), 'left_hz':rates.get(('DNp20','L'),0),
+    dec=control.get('decoder',{});typ=dec.get('neuron_type','DNp20')
+    return {'right_hz':rates.get((typ,'R'),0), 'left_hz':rates.get((typ,'L'),0),
+        'steering_type':typ,'steering_mode':dec.get('mode','legacy-bci'),'opponent':dec.get('opponent'),
+        'left_normalized':dec.get('left_normalized'),'right_normalized':dec.get('right_normalized'),
         'forward_hz':sum(v for (typ,side),v in rates.items() if typ=='DNpe017'),
         'turn':control['turn'],'forward':control['forward'],'raw_attack':control['attack'],
         'spikes':spikes,'yaw':action['camera_yaw'],'walking':action['forward'],'attacking':action['attack'],
@@ -153,13 +158,13 @@ def panel(state,limit,episode_reward,metrics,parts,config):
 def evaluation(env,checkpoint,config,game_config,count,record=False,output=None,preview=True,activity_mode='spikes',voltage_smoothing_ms=80.0):
     # A separate instance restores every neural trace. The training instance and
     # checkpoint are never stepped or written by evaluation.
-    fly=LearningFly(config['plasticity']);data=cp.load(checkpoint,fly);fly.freeze()
+    fly=LearningFly(config['plasticity'],config.get('decoder'));data=cp.load(checkpoint,fly,allow_decoder_change=True);fly.freeze()
     backfill_mean_cumulative_rewards(Path(data['run']),data['state'])
     original=fly.brain.weight.copy()
     results=[];rng=np.random.default_rng(config['training']['seed']+1000000000)
     for e in range(count):
         # Identical learned initial neural state for each independent held-out start.
-        cp.load(checkpoint,fly);fly.freeze();fly.reset_episode()
+        cp.load(checkpoint,fly,allow_decoder_change=True);fly.freeze();fly.reset_episode()
         start=randomized_start(rng,config['environment']);obs=reset_episode(env,start)
         attack=SustainedAttack(config['attack']);motion=EpisodeMotionStats();reward=0.;cumulative_reward_sum=0.;hits=0;distances=[];rec=None
         if record:
@@ -187,14 +192,20 @@ def evaluation(env,checkpoint,config,game_config,count,record=False,output=None,
         finally:
             if rec:rec.close(results[-1] if len(results)>e else {'interrupted':True})
     assert np.array_equal(original,fly.brain.weight),'Evaluation changed frozen weights'
-    return {'checkpoint':str(checkpoint),'episodes':results,'success_rate':average([r['success'] for r in results]),
+    return {'checkpoint':str(checkpoint),'decoder':signature(fly.decoder),'episodes':results,'success_rate':average([r['success'] for r in results]),
         **{k:average([r[k] for r in results]) for k in ('reward','mean_cumulative_reward','mean_distance','final_distance','angular_error','target_hit_rate','target_break_rate','seconds','path_efficiency','path_length','target_progress','normalized_target_progress','closest_target_distance','turn_bias_deg_per_tick','total_abs_turn_deg','mean_abs_turn_deg_per_tick','forward_fraction','attack_fraction','mean_aim_error_deg','aim_within_30_fraction','forward_when_ahead_fraction','forward_when_not_ahead_fraction','attack_when_ahead_fraction','attack_when_not_ahead_fraction','on_target_fraction','max_break_progress')},
         'frozen_verified':True}
 
 
 def validate(c):
+    validated_config(c.get('decoder'))
+    if c['plasticity'].get('action_credit'):
+        from .action_credit import validated_config as validated_action_credit
+        ac=validated_action_credit(c['plasticity']['action_credit'])
+        if ac['mode']=='direct-opponent' and c.get('decoder',{}).get('neuron_type')!='MBON11':
+            raise ValueError('direct-opponent action credit requires MBON11 steering')
     t=c['training'];e=c['environment'];p=c['plasticity'];q=c['teaching']
-    if p['model']!='gamma1-selective-signed-v3':raise ValueError('Run 2C requires gamma1-selective-signed-v3')
+    if p['model'] not in ('gamma1-fatigue-selective-signed-v4','action-conditioned-steering-v1'):raise ValueError('Run 2D requires gamma1-fatigue-selective-signed-v4')
     for k in ('total_steps','max_steps_per_episode','evaluation_episodes'):
         if type(t[k]) is not int or t[k]<=0:raise ValueError(f'{k} must be a positive integer')
     for k in ('checkpoint_every_steps','evaluate_every_steps'):
@@ -203,7 +214,7 @@ def validate(c):
     ints=('pulse_ticks','cooldown_ticks','health_check_every_steps')
     if any(type(p[k]) is not int or p[k]<0 for k in ints):raise ValueError('Pulse/cooldown/health cadence must be nonnegative integers')
     if p['pulse_ticks']<=0 or p['health_check_every_steps']<=0:raise ValueError('Pulse and health cadence must be positive')
-    if not (p['eta']>=0 and p['current']>=0 and 0<p['eligibility_tau_ms']<p['eligibility_baseline_tau_ms'] and p['eligibility_reference_hz']>0 and p['eligibility_gate_hz']>=0 and 0<p['eligibility_winner_fraction']<=1 and type(p['eligibility_max_kcs']) is int and p['eligibility_max_kcs']>0 and p['eligibility_activity_floor']>=0 and p['recovery_tau_seconds']>0):raise ValueError('Invalid selective plasticity rate/time parameters')
+    if not (p['eta']>=0 and p['current']>=0 and 0<p['eligibility_tau_ms']<p['eligibility_baseline_tau_ms'] and p['eligibility_reference_hz']>0 and p['eligibility_gate_hz']>=0 and 0<p['eligibility_winner_fraction']<=1 and type(p['eligibility_max_kcs']) is int and p['eligibility_max_kcs']>0 and p['eligibility_activity_floor']>=0 and p['selection_fatigue_tau_ms']>0 and 0<=p['selection_fatigue_strength']<1 and p['recovery_tau_seconds']>0):raise ValueError('Invalid selective plasticity rate/time parameters')
     if not (0<p['minimum_fraction']<1<p['maximum_fraction'] and p['max_log_update_per_event']>0):raise ValueError('Invalid plasticity bounds')
     if q['model']!='balanced-raw-delta-v1':raise ValueError('Run 2B requires balanced-raw-delta-v1 teaching')
     if not (q['angle_scale_deg']>0 and q['distance_scale_blocks']>0 and q['progress_scale']>0):raise ValueError('Teaching normalization scales must be positive')
@@ -251,18 +262,24 @@ def main():
         if cp.resolve(run)!=selected:raise ValueError('Use --mode branch for an older checkpoint; resume only the latest generation to preserve history')
     else:
         run=root/datetime.now().strftime('run-%Y%m%d-%H%M%S-%f');run.mkdir()
-    fly=LearningFly(c['plasticity']);rng=np.random.default_rng(c['training']['seed'])
+    fly=LearningFly(c['plasticity'],c.get('decoder'));rng=np.random.default_rng(c['training']['seed'])
     if not (run/'model.json').exists():
+        credit_model=c['plasticity'].get('action_credit')
+        learning_description=(
+            'Action-conditioned steering credit: sparse transient KC winners are tagged by the left/right yaw actually expressed; aim reward-prediction error updates existing KC->MBON11 edges with per-MBON homeostatic normalization. Engineered experimental rule, not a reconstructed fly motor-learning circuit.'
+            if credit_model else
+            'Signed external teaching updates a transient KC pattern above each KC baseline; recent winners receive a soft decaying ranking penalty to encourage turnover; experimental credit assignment, not a claimed reconstructed appetitive DAN pathway'
+        )
         cp.write_json(run/'model.json',{'model':c['plasticity']['model'],'validated':False,
             'kernel':fly.brain.build,'native_runtime':getattr(fly.brain,'runtime_build',fly.brain.build),'circuit':fly.brain.circuit['report'],
             'initial_weight_sha256':fly.initial_weights,
             'upstream_weight_sha256_before_visual_adapter':fly.brain.pre_visual_weight_sha256,
-            'positive_reward':'Signed external teaching updates only the strongest transient KC pattern above each KC baseline; experimental credit assignment, not a claimed reconstructed appetitive DAN pathway',
+            'positive_reward':learning_description,'action_credit':credit_model,
             'sensory_input':'Minecraft RGB -> DOOMFLY v6 visual adapter: R1-R6 luminance + inferred R8p blue/R8y green; existing R8->aMe12 sign correction',
-            'visual_model':fly.brain.visual_report})
+            'visual_model':fly.brain.visual_report,'decoder':signature(fly.decoder)})
     state={'step':0,'episode':0,'history':[],'best_eval':None,'next_eval':c['training']['evaluate_every_steps'],'in_episode':False,'rng':rng.bit_generator.state}
     if old:
-        cp.load(selected,fly);state=copy.deepcopy(old['state']);rng.bit_generator.state=state['rng']
+        cp.load(selected,fly,allow_decoder_change=args.mode=='branch');state=copy.deepcopy(old['state']);rng.bit_generator.state=state['rng']
         backfilled=backfill_mean_cumulative_rewards(Path(old['run']),state)
         if backfilled:print(f'Reconstructed mean cumulative reward for {backfilled} completed episodes from existing metrics logs.',flush=True)
         if state['in_episode']:
@@ -279,7 +296,8 @@ def main():
         selected=cp.save(run,fly,state,c,'baseline')
     cp.write_json(root/'latest.json',{'checkpoint':str(selected)})
     cp.write_json(run/'reward-history.json',state['history'])
-    print(f'RUN 2C | SELECTIVE SIGNED PLASTICITY | transient competitive KC credit | balanced raw-delta teaching | {run}',flush=True)
+    credit_desc='action-conditioned steering RPE' if c['plasticity'].get('action_credit') else 'fatigue-selective signed plasticity'
+    print(f'RUN 2D | {credit_desc.upper()} | balanced raw-delta teaching | {run}',flush=True)
     env=None;rec=None
     metrics=open(run/f'metrics-{stamp}.jsonl','w',encoding='utf-8')
     try:
@@ -304,7 +322,8 @@ def main():
                 behavior=motion.update(before,after,action)
                 value,parts=reward_components(before,after,c['reward']);reward+=value;cumulative_reward_sum+=reward;hits+=after['on_target']
                 teach,teach_raw,teach_detail=teaching_signal(before,after,c['teaching'])
-                reinforcement=fly.reinforce(teach)
+                fly.record_action((after['yaw']-before['yaw']+180)%360-180)
+                reinforcement=fly.reinforce(teach,aim_signal=teach_detail['components']['angle'])
                 if teach>0:teach_counts['positive']+=1
                 elif teach<0:teach_counts['negative']+=1
                 else:teach_counts['neutral']+=1

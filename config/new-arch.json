@@ -1,8 +1,8 @@
 {
   "training": {
-    "total_steps": 100000,
+    "total_steps": 20000,
     "max_steps_per_episode": 400,
-    "checkpoint_every_steps": 10000,
+    "checkpoint_every_steps": 5000,
     "evaluate_every_steps": 5000,
     "evaluation_episodes": 5,
     "seed": 41027
@@ -33,6 +33,7 @@
   },
   "plasticity": {
     "model": "gamma1-fatigue-selective-signed-v4",
+
     "eta": 0.001,
     "eligibility_tau_ms": 120.0,
     "eligibility_reference_hz": 8.0,
@@ -44,24 +45,49 @@
     "pulse_ticks": 2,
     "cooldown_ticks": 4,
     "aversive_signal_threshold": 0.35,
+
     "health_check_every_steps": 100,
     "warning_saturation_fraction": 0.02,
     "critical_saturation_fraction": 0.1,
     "abort_saturation_fraction": 0.35,
     "abort_on_collapse": true,
+
     "eligibility_gate_hz": 1.0,
     "warning_extreme_fraction": 0.1,
     "critical_extreme_fraction": 0.25,
     "abort_extreme_fraction": 0.6,
+
     "eligibility_baseline_tau_ms": 1500.0,
     "eligibility_winner_fraction": 0.25,
     "eligibility_max_kcs": 256,
     "eligibility_activity_floor": 0.02,
+
     "warning_mean_drift": 0.1,
     "critical_mean_drift": 0.2,
     "abort_mean_drift": 0.3,
+
     "selection_fatigue_tau_ms": 1500.0,
-    "selection_fatigue_strength": 0.1
+    "selection_fatigue_strength": 0.1,
+
+    "action_credit": {
+      "model": "action-conditioned-steering-v2",
+      "mode": "calibrated-downstream",
+
+      "tau_ms": 300.0,
+      "prediction_tau_ms": 10000.0,
+      "max_yaw_deg_per_tick": 6.0,
+      "action_deadband_deg": 0.1,
+
+      "eta": 0.02,
+      "minimum_fraction": 0.5,
+      "maximum_fraction": 1.5,
+      "max_log_update": 0.002,
+
+      "mbon_turn_effect": {
+        "L": -1,
+        "R": 1
+      }
+    }
   },
   "recording": {
     "record_every_episodes": 20,
@@ -85,5 +111,23 @@
     "crosshair_weight": 0.2,
     "success_weight": 1.0,
     "deadband": 0.03
+  },
+  "decoder": {
+    "mode": "balanced-bilateral-v1",
+    "neuron_type": "DNp20",
+    "left_reference_hz": 7.0184999999999995,
+    "right_reference_hz": 30.391683333333333,
+    "regularizer": 1.0,
+    "deadband": 0.05,
+    "max_yaw_deg_per_second": 120.0,
+    "polarity": 1,
+    "calibration": {
+      "image": "uniform RGB 128, 640x480",
+      "warmup_ticks": 20,
+      "measurement_ticks": 60,
+      "weights": "untrained baseline",
+      "model": "gamma1-fatigue-selective-signed-v4",
+      "source": "artifacts/decoder-calibration/neutral.json"
+    }
   }
 }

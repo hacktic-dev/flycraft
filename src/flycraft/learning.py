@@ -1,4 +1,4 @@
-"""Run-2C selective signed learning adapter with pinned DOOMFLY v6 RGB vision."""
+"""Run-2D fatigue-selective signed learning adapter with pinned DOOMFLY v6 RGB vision."""
 import ctypes
 import hashlib
 import json
@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[2]
 def prepare_kernel():
     """Build the existing native neural kernel plus the read-only spike hook.
 
-    Run-2C plasticity is applied outside this kernel. Native v1 LTD is always
+    Run-2D plasticity is applied outside this kernel. Native v1 LTD is always
     called with learning_enabled=0 by R8VisualMemoryBrain.
     """
     folder = ROOT/'.tools/learning-kernel'
@@ -48,7 +48,7 @@ def prepare_kernel():
             '-Wl,--export-all-symbols', str(cpp), '-o', str(dll)
         ], check=True)
         record = {
-            'model': 'gamma1-selective-signed-v3-neural-runtime',
+            'model': 'gamma1-fatigue-selective-signed-v4-neural-runtime',
             'source_sha256': hashlib.sha256(native_upstream.SOURCE.read_bytes()).hexdigest(),
             'observer_sha256': digest,
             'binary_sha256': hashlib.sha256(dll.read_bytes()).hexdigest(),
@@ -56,8 +56,8 @@ def prepare_kernel():
         meta.write_text(json.dumps(record, indent=2))
     # The native binary is intentionally unchanged by v3; refresh provenance even
     # when an already-correct observer DLL can be reused.
-    if record.get('model') != 'gamma1-selective-signed-v3-neural-runtime':
-        record['model'] = 'gamma1-selective-signed-v3-neural-runtime'
+    if record.get('model') != 'gamma1-fatigue-selective-signed-v4-neural-runtime':
+        record['model'] = 'gamma1-fatigue-selective-signed-v4-neural-runtime'
         meta.write_text(json.dumps(record, indent=2))
     # SelectiveMemoryBrain ultimately calls legacy MemoryBrain.__init__, so patch
     # the legacy module's runtime exactly as before.
@@ -67,7 +67,7 @@ def prepare_kernel():
 
 
 class LearningFly:
-    def __init__(self, config):
+    def __init__(self, config, decoder_config=None):
         prepare_kernel()
         self.config = config
         self.brain = R8VisualMemoryBrain(
@@ -79,6 +79,8 @@ class LearningFly:
             eligibility_winner_fraction=config['eligibility_winner_fraction'],
             eligibility_max_kcs=config['eligibility_max_kcs'],
             eligibility_activity_floor=config['eligibility_activity_floor'],
+            selection_fatigue_tau_ms=config['selection_fatigue_tau_ms'],
+            selection_fatigue_strength=config['selection_fatigue_strength'],
             recovery_tau_seconds=config['recovery_tau_seconds'],
             minimum_fraction=config['minimum_fraction'],
             maximum_fraction=config['maximum_fraction'],
@@ -103,7 +105,15 @@ class LearningFly:
         }
 
         self.manifest = json.loads((native_upstream.GRAPH.parent/'manifest.json').read_text())
-        self.decoder = NeuralControls(self.manifest['readouts'], mode='bci')
+        from .decoder import make_decoder
+        self.action_credit = None
+        readouts = list(self.manifest['readouts'])
+        if config.get('action_credit'):
+            from .action_credit import ActionCredit
+            self.action_credit = ActionCredit(self.brain, config['action_credit'], decoder_config)
+            for cell in self.brain.circuit['report']['MBON']:
+                readouts.append({'index':cell['index'],'id':cell['id'],'type':'MBON11','side':cell['soma_side']})
+        self.decoder = make_decoder(readouts, decoder_config)
         self.initial_weights = hashlib.sha256(self.brain.weight.tobytes()).hexdigest()
         lock = json.loads((ROOT/'model-lock.json').read_text(encoding='utf-8-sig'))
         assert self.brain.pre_visual_weight_sha256 == lock['weight_sha256']
@@ -138,7 +148,8 @@ class LearningFly:
 
         # Evaluation/replay must be observationally frozen, including traces.
         frozen_names = ('eligibility', 'eligibility_last', 'modulation', 'modulation_last',
-                        'credit_trace', 'credit_baseline', 'credit_age_ms')
+                        'credit_trace', 'credit_baseline', 'credit_age_ms',
+                        'selection_fatigue')
         frozen = {k: getattr(self.brain, k).copy() for k in frozen_names} if not self.learning else {}
         try:
             counts, wall = self.brain.rgb_step(
@@ -179,7 +190,11 @@ class LearningFly:
             'R8_light_max': float(self.brain.r8_light.max()),
         }
 
-    def reinforce(self, signal):
+    def record_action(self, yaw_degrees):
+        if self.learning and self.action_credit:
+            self.action_credit.observe(self.last_counts, yaw_degrees)
+
+    def reinforce(self, signal, aim_signal=None):
         """Apply signed plastic teaching and optionally schedule aversive PPL101.
 
         Positive signals directly potentiate eligible KC->MBON11 edges. Negative
@@ -190,7 +205,12 @@ class LearningFly:
         if not self.learning:
             return self.last_reinforcement
 
-        detail = self.brain.teach(signal)
+        if self.action_credit:
+            if aim_signal is None:raise ValueError('Action credit requires the aim outcome separately')
+            signal = float(aim_signal)
+            detail = self.action_credit.teach(signal)
+        else:
+            detail = self.brain.teach(signal)
         scheduled = False
         if signal > 0:
             self.positive_events += 1
@@ -200,7 +220,7 @@ class LearningFly:
             self.neutral_events += 1
         self.teaching_abs_total += abs(signal)
 
-        if (signal <= -self.config['aversive_signal_threshold'] and
+        if (not self.action_credit and signal <= -self.config['aversive_signal_threshold'] and
                 self.pending_ticks == 0 and self.cooldown_ticks == 0):
             self.pending_ticks = self.config['pulse_ticks']
             scheduled = True
