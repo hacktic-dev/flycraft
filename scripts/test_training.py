@@ -28,13 +28,17 @@ assert reward_components(b,{**b,'target_present':False,'progress':0},c['reward']
 attack=SustainedAttack(c['attack']);assert [attack.step(x) for x in [True]+[False]*7]==[True]*6+[False]*2
 assert [i for i in range(1,22) if should_record(i,{**c['recording'],'record_every_episodes':10})]==[1,10,20]
 fly=LearningFly(c['plasticity']);brain=fly.brain
+assert math.isclose(brain.dt,.5), f'Expected FlyCraft dt=0.5 ms, got {brain.dt}'
 assert len(brain.r8)==811, f'Expected DOOMFLY v6 mapped R8 count 811, got {len(brain.r8)}'
 assert int((brain.r8_channel==2).sum())+int((brain.r8_channel==1).sum())==811
 assert len(brain.corrected_edges)>0
 assert brain.pre_visual_weight_sha256==json.loads((ROOT/'model-lock.json').read_text(encoding='utf-8-sig'))['weight_sha256']
 print('PASS DOOMFLY v6 visual adapter | R8=',len(brain.r8),'corrected R8->aMe12 edges=',len(brain.corrected_edges),flush=True)
 # Controlled physiological assay: KC excitation is test-only, never gameplay input.
+cursor_before=brain.cursor
 brain.step(np.zeros(len(brain.retina)),50,learning=True,stimulation=(brain.circuit['kc'][:5],30.))
+assert brain.cursor-cursor_before==100, f'50 ms must be 100 neural ticks at dt=0.5 ms, got {brain.cursor-cursor_before}'
+assert math.isclose(brain.sim_ms,50.0), brain.sim_ms
 before=brain.weight[brain.circuit['edges']].copy()
 fly.reinforce(20);assert fly.pending_ticks==0
 fly.reinforce(-1);assert fly.pending_ticks==4

@@ -157,8 +157,9 @@ class R8VisualMemoryBrain(FatigueSelectiveMemoryBrain):
             ticks = round(duration_ms / self.dt)
             total = np.zeros(self.n, dtype=np.int32)
             wall = 0.0
+            max_chunk_ticks = max(1, round(10.0 / self.dt))
             while ticks:
-                n = min(100, ticks)
+                n = min(max_chunk_ticks, ticks)
                 counts, elapsed = self.rgb_step(frame, n * self.dt, _visual_input=(samples, values), **kwargs)
                 total += counts
                 wall += elapsed

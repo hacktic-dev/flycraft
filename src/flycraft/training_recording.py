@@ -15,7 +15,7 @@ class EpisodeRecording:
         self.view.record_names={'dashboard.mp4','retina.mp4','neural-activity.mp4'}
         self.render=config['record_dashboard'] or preview
         self.activity=ActivityWriter(self.folder,fly.brain.ids) if config['record_activity'] else None
-        self.voltage=VoltageWriter(self.folder,fly.brain.n) if config['record_activity'] else None
+        self.voltage=VoltageWriter(self.folder,fly.brain.n,simulation_dt_ms=fly.brain.dt) if config['record_activity'] else None
         self.trajectory=TrajectoryWriter(self.folder,game_config,initial)
         self.log=gzip.open(self.folder/'steps-00000.jsonl.gz','wt',encoding='utf-8')
         self.video=None

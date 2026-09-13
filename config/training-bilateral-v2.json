@@ -1,0 +1,113 @@
+{
+  "training": {
+    "total_steps": 100000,
+    "max_steps_per_episode": 400,
+    "checkpoint_every_steps": 10000,
+    "evaluate_every_steps": 5000,
+    "evaluation_episodes": 5,
+    "seed": 41027
+  },
+  "environment": {
+    "randomize_player_position": true,
+    "randomize_tree_position": true,
+    "randomize_yaw": true,
+    "min_tree_distance": 2.0,
+    "max_tree_distance": 7.0,
+    "player_spawn_radius": 8.0
+  },
+  "reward": {
+    "angle_improvement": 0.05,
+    "angle_worsening": -0.025,
+    "distance_improvement": 0.1,
+    "distance_worsening": -0.05,
+    "crosshair_on_log": 0.02,
+    "breaking_progress_gain": 2.0,
+    "breaking_progress_loss": -1.0,
+    "log_broken": 20.0,
+    "step_penalty": -0.001
+  },
+  "attack": {
+    "threshold": 1.0,
+    "decay": 0.85,
+    "hold_steps": 6
+  },
+  "plasticity": {
+    "model": "gamma1-fatigue-selective-signed-v4",
+    "eta": 0.001,
+    "eligibility_tau_ms": 120.0,
+    "eligibility_reference_hz": 8.0,
+    "recovery_tau_seconds": 1800.0,
+    "minimum_fraction": 0.5,
+    "maximum_fraction": 1.5,
+    "max_log_update_per_event": 0.002,
+    "current": 8.0,
+    "pulse_ticks": 2,
+    "cooldown_ticks": 4,
+    "aversive_signal_threshold": 0.35,
+    "health_check_every_steps": 100,
+    "warning_saturation_fraction": 0.02,
+    "critical_saturation_fraction": 0.1,
+    "abort_saturation_fraction": 0.35,
+    "abort_on_collapse": true,
+    "eligibility_gate_hz": 1.0,
+    "warning_extreme_fraction": 0.1,
+    "critical_extreme_fraction": 0.25,
+    "abort_extreme_fraction": 0.6,
+    "eligibility_baseline_tau_ms": 1500.0,
+    "eligibility_winner_fraction": 0.25,
+    "eligibility_max_kcs": 256,
+    "eligibility_activity_floor": 0.02,
+    "warning_mean_drift": 0.1,
+    "critical_mean_drift": 0.2,
+    "abort_mean_drift": 0.3,
+    "selection_fatigue_tau_ms": 1500.0,
+    "selection_fatigue_strength": 0.1
+  },
+  "recording": {
+    "record_every_episodes": 20,
+    "record_first_episode": true,
+    "record_final_episode": true,
+    "record_minecraft": true,
+    "record_dashboard": true,
+    "record_activity": true
+  },
+  "dashboard": {
+    "reward_rolling_average_episodes": 20
+  },
+  "teaching": {
+    "model": "balanced-raw-delta-v1",
+    "angle_scale_deg": 15.0,
+    "distance_scale_blocks": 0.25,
+    "progress_scale": 0.1,
+    "angle_weight": 0.25,
+    "distance_weight": 0.35,
+    "progress_weight": 0.75,
+    "crosshair_weight": 0.2,
+    "success_weight": 1.0,
+    "deadband": 0.03
+  },
+  "decoder": {
+    "mode": "balanced-bilateral-v2",
+    "neuron_type": "DNp20",
+    "left_center_hz": 17.373665598164322,
+    "right_center_hz": 21.612362292345967,
+    "left_scale_hz": 7.076485932183399,
+    "right_scale_hz": 4.5906669460175955,
+    "opponent_offset": 0.00273876022872821,
+    "response_scale": 3.332374634022597,
+    "deadband": 0.05,
+    "max_yaw_deg_per_second": 120.0,
+    "polarity": 1,
+    "calibration": {
+      "source": "frozen baseline brain on randomized real Minecraft task scenes",
+      "scene_count": 40,
+      "samples_per_scene": 2,
+      "rate_sample_count": 80,
+      "seed": 134044,
+      "target_median_abs_command": 0.25,
+      "measured_mean_command": 1.3877787807814458e-18,
+      "measured_median_abs_command": 0.2499817466646475,
+      "weights": "fresh untrained baseline"
+    }
+  }
+}

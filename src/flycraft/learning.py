@@ -32,7 +32,7 @@ def prepare_kernel():
     )
     source = source.replace(
         'counts[i]++;',
-        'counts[i]++;if(observed_bins)observed_bins[(((*clock)*60/10000)%3)*n+i]++;'
+        'counts[i]++;if(observed_bins)observed_bins[((int)((*clock)*dt*60.f/1000.f)%3)*n+i]++;'
     )
     digest = hashlib.sha256(source.encode()).hexdigest()
     dll = folder/'memory.dll'
@@ -85,6 +85,7 @@ class LearningFly:
             minimum_fraction=config['minimum_fraction'],
             maximum_fraction=config['maximum_fraction'],
             max_log_update_per_event=config['max_log_update_per_event'],
+            dt=float(config.get('dt_ms', 0.5)),
         )
         if os.environ.get('FLYCRAFT_REFERENCE_KERNEL') != '1':
             from .fast_kernel import install

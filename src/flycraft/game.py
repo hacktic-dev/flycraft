@@ -27,7 +27,7 @@ def _capture_size(c):
 def make_game(c):
     capture_w,capture_h=_capture_size(c)
     initial=InitialEnvironmentConfig(image_width=capture_w,image_height=capture_h,gamemode=GameMode.CREATIVE,difficulty=Difficulty.PEACEFUL,world_type=WorldType.SUPERFLAT,seed=str(c['seed']),generate_structures=False,initial_extra_commands=arena_commands(c),hud_hidden=False,render_distance=4,simulation_distance=5,no_fov_effect=True,request_raycast=True)
-    return craftground.make(initial_env_config=initial,port=c['port'],action_space_version=ActionSpaceVersion.V2_MINERL_HUMAN,verbose_gradle=True,verbose_jvm=False)
+    return craftground.make(initial_env_config=initial,port=c['port'],action_space_version=ActionSpaceVersion.V2_MINERL_HUMAN,verbose_gradle=False,verbose_jvm=False)
 
 def pixels(obs,c):
     """Return the exact undistorted RGB frame used by FlyCraft (normally 640x480)."""

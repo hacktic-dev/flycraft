@@ -1,8 +1,8 @@
 {
   "training": {
-    "total_steps": 20000,
+    "total_steps": 100000,
     "max_steps_per_episode": 400,
-    "checkpoint_every_steps": 5000,
+    "checkpoint_every_steps": 10000,
     "evaluate_every_steps": 5000,
     "evaluation_episodes": 5,
     "seed": 41027
@@ -33,7 +33,6 @@
   },
   "plasticity": {
     "model": "gamma1-fatigue-selective-signed-v4",
-
     "eta": 0.001,
     "eligibility_tau_ms": 120.0,
     "eligibility_reference_hz": 8.0,
@@ -45,49 +44,40 @@
     "pulse_ticks": 2,
     "cooldown_ticks": 4,
     "aversive_signal_threshold": 0.35,
-
     "health_check_every_steps": 100,
     "warning_saturation_fraction": 0.02,
     "critical_saturation_fraction": 0.1,
     "abort_saturation_fraction": 0.35,
     "abort_on_collapse": true,
-
     "eligibility_gate_hz": 1.0,
     "warning_extreme_fraction": 0.1,
     "critical_extreme_fraction": 0.25,
     "abort_extreme_fraction": 0.6,
-
     "eligibility_baseline_tau_ms": 1500.0,
     "eligibility_winner_fraction": 0.25,
     "eligibility_max_kcs": 256,
     "eligibility_activity_floor": 0.02,
-
     "warning_mean_drift": 0.1,
     "critical_mean_drift": 0.2,
     "abort_mean_drift": 0.3,
-
     "selection_fatigue_tau_ms": 1500.0,
     "selection_fatigue_strength": 0.1,
-
-    "action_credit": {
-      "model": "action-conditioned-steering-v2",
-      "mode": "calibrated-downstream",
-
-      "tau_ms": 300.0,
-      "prediction_tau_ms": 10000.0,
-      "max_yaw_deg_per_tick": 6.0,
-      "action_deadband_deg": 0.1,
-
-      "eta": 0.02,
-      "minimum_fraction": 0.5,
-      "maximum_fraction": 1.5,
-      "max_log_update": 0.002,
-
-      "mbon_turn_effect": {
-        "L": -1,
-        "R": 1
-      }
-    }
+	"action_credit": {
+  "model": "action-conditioned-steering-v2",
+  "mode": "calibrated-downstream",
+  "tau_ms": 300.0,
+  "prediction_tau_ms": 10000.0,
+  "max_yaw_deg_per_tick": 6.0,
+  "action_deadband_deg": 0.1,
+  "eta": 0.02,
+  "minimum_fraction": 0.5,
+  "maximum_fraction": 1.5,
+  "max_log_update": 0.002,
+  "mbon_turn_effect": {
+    "L": -1,
+    "R": 1
+  }
+}
   },
   "recording": {
     "record_every_episodes": 20,
@@ -113,21 +103,349 @@
     "deadband": 0.03
   },
   "decoder": {
-    "mode": "balanced-bilateral-v1",
+    "mode": "balanced-bilateral-v3",
     "neuron_type": "DNp20",
-    "left_reference_hz": 7.0184999999999995,
-    "right_reference_hz": 30.391683333333333,
-    "regularizer": 1.0,
     "deadband": 0.05,
     "max_yaw_deg_per_second": 120.0,
     "polarity": 1,
+    "left_center_hz": 5.395054028064257,
+    "right_center_hz": 14.993974890592979,
+    "left_scale_hz": 4.457606678423337,
+    "right_scale_hz": 8.79609924397243,
+    "opponent_offset": 0.02815104770323884,
+    "response_scale": 3.6394690523501705,
+    "command_offset": -0.1286660317540001,
     "calibration": {
-      "image": "uniform RGB 128, 640x480",
-      "warmup_ticks": 20,
-      "measurement_ticks": 60,
-      "weights": "untrained baseline",
-      "model": "gamma1-fatigue-selective-signed-v4",
-      "source": "artifacts/decoder-calibration/neutral.json"
+      "version": "mirrored-pairs-from-scratch-v4",
+      "from_scratch": true,
+      "inherited_fitted_decoder_values": false,
+      "source_config": "config\\training-bilateral.json",
+      "weights": "fresh untrained baseline",
+      "seed": 181338,
+      "pairs": 20,
+      "mirror_axes": [
+        "x",
+        "z"
+      ],
+      "rate_warmup_ticks": 6,
+      "rate_samples_per_scene": 12,
+      "closed_loop_steps_per_member": 100,
+      "closed_loop_passes": 2,
+      "fresh_rate_fit": {
+        "left_center_hz": 5.395054028064257,
+        "right_center_hz": 14.993974890592979,
+        "left_scale_hz": 4.457606678423337,
+        "right_scale_hz": 8.79609924397243,
+        "opponent_offset": 0.02815104770323884,
+        "response_scale": 3.6394690523501705,
+        "calibration_mean_command": 7.401486830834377e-18,
+        "calibration_median_abs_command": 0.2621690943449848,
+        "sample_count": 480
+      },
+      "history": [
+        {
+          "pass": 1,
+          "input_command_offset": 0.0,
+          "mean_turn_bias_deg_per_tick": -0.7265251064449548,
+          "mean_abs_pair_residual_deg_per_tick": 0.9730500913113355,
+          "pairs": [
+            {
+              "pair": 1,
+              "axis": "x",
+              "a_bias": -1.4325002670288085,
+              "b_bias": -0.8580000305175781,
+              "pair_residual": -1.1452501487731932
+            },
+            {
+              "pair": 2,
+              "axis": "z",
+              "a_bias": -1.1444999504089355,
+              "b_bias": -1.4940000915527343,
+              "pair_residual": -1.3192500209808349
+            },
+            {
+              "pair": 3,
+              "axis": "x",
+              "a_bias": -1.6214999961853027,
+              "b_bias": -1.3440001106262207,
+              "pair_residual": -1.4827500534057618
+            },
+            {
+              "pair": 4,
+              "axis": "z",
+              "a_bias": -1.1024994659423828,
+              "b_bias": -1.1295001983642579,
+              "pair_residual": -1.1159998321533204
+            },
+            {
+              "pair": 5,
+              "axis": "x",
+              "a_bias": -0.6164999008178711,
+              "b_bias": -1.6589998626708984,
+              "pair_residual": -1.1377498817443847
+            },
+            {
+              "pair": 6,
+              "axis": "z",
+              "a_bias": -0.37350021362304686,
+              "b_bias": -1.2720001983642577,
+              "pair_residual": -0.8227502059936522
+            },
+            {
+              "pair": 7,
+              "axis": "x",
+              "a_bias": -1.6335006120800972,
+              "b_bias": -1.7085005781054496,
+              "pair_residual": -1.6710005950927735
+            },
+            {
+              "pair": 8,
+              "axis": "z",
+              "a_bias": -0.08249992370605469,
+              "b_bias": -0.7350002288818359,
+              "pair_residual": -0.40875007629394533
+            },
+            {
+              "pair": 9,
+              "axis": "x",
+              "a_bias": -1.117500171661377,
+              "b_bias": -0.61350004196167,
+              "pair_residual": -0.8655001068115236
+            },
+            {
+              "pair": 10,
+              "axis": "z",
+              "a_bias": 0.40950001776218414,
+              "b_bias": 1.7144997787475587,
+              "pair_residual": 1.0619998982548715
+            },
+            {
+              "pair": 11,
+              "axis": "x",
+              "a_bias": -1.7085003232955933,
+              "b_bias": -1.5149998903274535,
+              "pair_residual": -1.6117501068115234
+            },
+            {
+              "pair": 12,
+              "axis": "z",
+              "a_bias": -1.231500129699707,
+              "b_bias": -1.3590001106262206,
+              "pair_residual": -1.2952501201629638
+            },
+            {
+              "pair": 13,
+              "axis": "x",
+              "a_bias": 1.9814999771118165,
+              "b_bias": -0.4170000457763672,
+              "pair_residual": 0.7822499656677246
+            },
+            {
+              "pair": 14,
+              "axis": "z",
+              "a_bias": 1.3424999618530273,
+              "b_bias": -1.455000171661377,
+              "pair_residual": -0.056250104904174814
+            },
+            {
+              "pair": 15,
+              "axis": "x",
+              "a_bias": -1.2150009155273438,
+              "b_bias": -0.2670001220703125,
+              "pair_residual": -0.7410005187988281
+            },
+            {
+              "pair": 16,
+              "axis": "z",
+              "a_bias": -1.4219996643066406,
+              "b_bias": -0.4470000457763672,
+              "pair_residual": -0.9344998550415039
+            },
+            {
+              "pair": 17,
+              "axis": "x",
+              "a_bias": -1.2075003814697265,
+              "b_bias": 0.335999870300293,
+              "pair_residual": -0.43575025558471675
+            },
+            {
+              "pair": 18,
+              "axis": "z",
+              "a_bias": -1.5900001728534698,
+              "b_bias": -0.7305000305175782,
+              "pair_residual": -1.160250101685524
+            },
+            {
+              "pair": 19,
+              "axis": "x",
+              "a_bias": -0.5159999847412109,
+              "b_bias": -1.0680000019073486,
+              "pair_residual": -0.7919999933242797
+            },
+            {
+              "pair": 20,
+              "axis": "z",
+              "a_bias": 0.9825001525878906,
+              "b_bias": 0.2594998168945313,
+              "pair_residual": 0.6209999847412109
+            }
+          ],
+          "fitted_command_offset": -0.13208145767049567,
+          "offline_mean_command_after_fit": 1.5987211554602253e-17,
+          "samples": 4000
+        },
+        {
+          "pass": 2,
+          "input_command_offset": -0.13208145767049567,
+          "mean_turn_bias_deg_per_tick": 0.021562506817281245,
+          "mean_abs_pair_residual_deg_per_tick": 0.5734125349894168,
+          "pairs": [
+            {
+              "pair": 1,
+              "axis": "x",
+              "a_bias": -0.15600013732910156,
+              "b_bias": -0.8294998168945312,
+              "pair_residual": -0.4927499771118164
+            },
+            {
+              "pair": 2,
+              "axis": "z",
+              "a_bias": -1.0260000160336495,
+              "b_bias": -0.4694998741149902,
+              "pair_residual": -0.7477499450743199
+            },
+            {
+              "pair": 3,
+              "axis": "x",
+              "a_bias": -0.6510000419616699,
+              "b_bias": -0.7365000724792481,
+              "pair_residual": -0.693750057220459
+            },
+            {
+              "pair": 4,
+              "axis": "z",
+              "a_bias": 1.9020003509521484,
+              "b_bias": -0.4125000762939453,
+              "pair_residual": 0.7447501373291016
+            },
+            {
+              "pair": 5,
+              "axis": "x",
+              "a_bias": 0.024000015258789063,
+              "b_bias": -1.0590003204345704,
+              "pair_residual": -0.5175001525878906
+            },
+            {
+              "pair": 6,
+              "axis": "z",
+              "a_bias": 0.6330000305175781,
+              "b_bias": -0.594000039100647,
+              "pair_residual": 0.019499995708465556
+            },
+            {
+              "pair": 7,
+              "axis": "x",
+              "a_bias": -0.27450004369020464,
+              "b_bias": -0.21000005930662155,
+              "pair_residual": -0.2422500514984131
+            },
+            {
+              "pair": 8,
+              "axis": "z",
+              "a_bias": -1.1024999237060547,
+              "b_bias": 1.6035000610351562,
+              "pair_residual": 0.25050006866455077
+            },
+            {
+              "pair": 9,
+              "axis": "x",
+              "a_bias": -0.36749997138977053,
+              "b_bias": 2.1210005378723142,
+              "pair_residual": 0.8767502832412719
+            },
+            {
+              "pair": 10,
+              "axis": "z",
+              "a_bias": 0.43049997806549073,
+              "b_bias": 1.7685001754760743,
+              "pair_residual": 1.0995000767707825
+            },
+            {
+              "pair": 11,
+              "axis": "x",
+              "a_bias": -0.1484999990463257,
+              "b_bias": -0.2009999704360962,
+              "pair_residual": -0.17474998474121095
+            },
+            {
+              "pair": 12,
+              "axis": "z",
+              "a_bias": -0.4769998931884766,
+              "b_bias": -0.998999834060669,
+              "pair_residual": -0.7379998636245728
+            },
+            {
+              "pair": 13,
+              "axis": "x",
+              "a_bias": -0.3389996337890625,
+              "b_bias": 0.0,
+              "pair_residual": -0.16949981689453125
+            },
+            {
+              "pair": 14,
+              "axis": "z",
+              "a_bias": -0.6570000267028808,
+              "b_bias": -0.18600006103515626,
+              "pair_residual": -0.4215000438690185
+            },
+            {
+              "pair": 15,
+              "axis": "x",
+              "a_bias": -0.6285005187988282,
+              "b_bias": -0.5955000305175782,
+              "pair_residual": -0.6120002746582032
+            },
+            {
+              "pair": 16,
+              "axis": "z",
+              "a_bias": -1.059000244140625,
+              "b_bias": 2.550000228881836,
+              "pair_residual": 0.7454999923706055
+            },
+            {
+              "pair": 17,
+              "axis": "x",
+              "a_bias": -0.47850013732910157,
+              "b_bias": -0.9390000915527343,
+              "pair_residual": -0.708750114440918
+            },
+            {
+              "pair": 18,
+              "axis": "z",
+              "a_bias": 2.872500284910202,
+              "b_bias": 0.9209998321533203,
+              "pair_residual": 1.8967500585317612
+            },
+            {
+              "pair": 19,
+              "axis": "x",
+              "a_bias": 0.4379999542236328,
+              "b_bias": -0.14250022888183594,
+              "pair_residual": 0.14774986267089843
+            },
+            {
+              "pair": 20,
+              "axis": "z",
+              "a_bias": -0.007499809265136719,
+              "b_bias": 0.34499969482421877,
+              "pair_residual": 0.16874994277954103
+            }
+          ],
+          "fitted_command_offset": -0.1286660317540001,
+          "offline_mean_command_after_fit": -2.842170943040401e-17,
+          "samples": 4000
+        }
+      ]
     }
   }
 }

@@ -38,7 +38,7 @@ def build_observer():
     assert original.count(signature)==1 and original.count('counts[i]++;')==1
     instrumented=original.replace('void neural_advance(', 'void neural_advance_observed(')
     instrumented=instrumented.replace(signature,signature[:-1]+',int32_t* bins)')
-    instrumented=instrumented.replace('counts[i]++;','counts[i]++;bins[(((*clock)*60/10000)%3)*n+i]++;')
+    instrumented=instrumented.replace('counts[i]++;','counts[i]++;bins[((int)((*clock)*dt*60.f/1000.f)%3)*n+i]++;')
     BUILD.mkdir(parents=True,exist_ok=True)
     cpp=BUILD/'kernel_observed.cpp';dll=BUILD/'activity.dll';manifest=BUILD/'build.json'
     digest=hashlib.sha256(instrumented.encode()).hexdigest()
@@ -50,7 +50,7 @@ def build_observer():
     temp=dll.with_suffix('.partial.dll')
     command=[str(compiler),'-O3','-std=c++17','-shared','-static','-Wl,--export-all-symbols',str(cpp),'-o',str(temp)]
     subprocess.run(command,check=True);temp.replace(dll)
-    manifest.write_text(json.dumps({'original_sha256':hashlib.sha256(source.read_bytes()).hexdigest(),'instrumented_sha256':digest,'binary_sha256':hashlib.sha256(dll.read_bytes()).hexdigest(),'observation':'integer spike counters only; bin=floor(native_tick*60/10000)','compile_command':command},indent=2))
+    manifest.write_text(json.dumps({'original_sha256':hashlib.sha256(source.read_bytes()).hexdigest(),'instrumented_sha256':digest,'binary_sha256':hashlib.sha256(dll.read_bytes()).hexdigest(),'observation':'integer spike counters only; bin=floor(native_tick*dt_ms*60/1000) mod 3','compile_command':command},indent=2))
     return dll
 
 
@@ -63,7 +63,8 @@ class SpikeObserver:
         self.bins=np.zeros((3,n),dtype=np.int32)
 
     def step(self,brain,*args,**kwargs):
-        if brain.cursor%500:raise ValueError('Observer must start on a 50 ms control boundary')
+        boundary_ticks=round(50.0/brain.dt)
+        if brain.cursor%boundary_ticks:raise ValueError('Observer must start on a 50 ms control boundary')
         self.bins.fill(0)
         original=native._f
         # The project runs one simulation on one thread. Retain NativeBrain.step
@@ -71,7 +72,7 @@ class SpikeObserver:
         native._f=lambda *a:self.function(*a,self.bins.ctypes.data)
         try:result=brain.step(*args,**kwargs)
         finally:native._f=original
-        if brain.cursor%500:raise ValueError('Observer requires 50 ms control updates')
+        if brain.cursor%boundary_ticks:raise ValueError('Observer requires 50 ms control updates')
         if not np.array_equal(self.bins.sum(axis=0),result[0]):raise RuntimeError('Spike observer count mismatch')
         return result
 
@@ -114,11 +115,12 @@ class VoltageWriter:
     visualization recording only; the native brain continues to use its full
     precision state.  Chunks avoid holding an entire long run in RAM.
     """
-    def __init__(self,folder,neuron_count,chunk_frames=VOLTAGE_CHUNK_FRAMES):
+    def __init__(self,folder,neuron_count,chunk_frames=VOLTAGE_CHUNK_FRAMES,simulation_dt_ms=.1):
         self.folder=Path(folder)/'voltage-20hz'
         self.folder.mkdir(parents=True,exist_ok=True)
         self.neuron_count=int(neuron_count)
         self.chunk_frames=int(chunk_frames)
+        self.simulation_dt_ms=float(simulation_dt_ms)
         self.buf=np.empty((self.chunk_frames,self.neuron_count),dtype=np.uint8)
         self.ticks=np.empty(self.chunk_frames,dtype=np.int64)
         self.sim_ms=np.empty(self.chunk_frames,dtype=np.float64)
@@ -136,7 +138,8 @@ class VoltageWriter:
             'chunk_frames':self.chunk_frames,
             'total_frames':self.total,
             'complete':bool(complete),
-            'sampling':'one snapshot after each 50 ms NativeBrain.step; simulation itself remains at 0.1 ms',
+            'sampling':f'one snapshot after each 50 ms NativeBrain.step; simulation dt={self.simulation_dt_ms:g} ms',
+            'simulation_dt_ms':self.simulation_dt_ms,
             'quantization':'linear uint8 over the visualizer range [-59,-45] mV; clipped outside this range',
         }
         self.meta_path.write_text(json.dumps(meta,indent=2))
