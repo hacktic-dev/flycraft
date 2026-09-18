@@ -222,8 +222,17 @@ class Visuals:
         im.paste(Image.fromarray(canvas),(0,55));d=ImageDraw.Draw(im)
         if clean:
             d.text((28,10),'NEURAL ACTIVITY',font=font(24),fill=FG)
-            status='EXPERIMENTAL LEARNING' if getattr(self.fly,'learning',False) else 'FROZEN / REPLAY'
-            d.text((28,39),status,font=font(14),fill=CYAN)
+            training=getattr(self.fly,'training',None) or {}
+            readout=(training.get('readout_learning') or {}) if training.get('learning_mode')=='frozen-connectome-readout-v1' else {}
+            readout_phase=str(readout.get('phase',''))
+            if readout_phase in ('REPLAY','EVALUATION'):
+                status=None
+            elif training.get('learning_mode')=='frozen-connectome-readout-v1':
+                status='CONNECTOME FROZEN / READOUT LEARNING'
+            else:
+                status='EXPERIMENTAL LEARNING' if getattr(self.fly,'learning',False) else 'FROZEN / REPLAY'
+            if status:
+                d.text((28,39),status,font=font(14),fill=CYAN)
             d.text((width-300,15),f'{np.count_nonzero(counts):,} firing this frame',font=font(18),fill=CYAN)
             d.text((28,height-27),'MaleCNS anatomy   /   gold = spikes   /   250 ms visual trail',font=font(16),fill=FG)
             return im
@@ -311,7 +320,95 @@ class Visuals:
         self.show(rgb,retina,activity,dashboard,preview_rgb=game_rgb)
         return activity
 
+    def readout_learning_panel(self,im,p):
+        """Unified dashboard for readout training and autonomous test footage."""
+        d=ImageDraw.Draw(im);width,height=im.size
+        d.rectangle((0,0,width-1,height-1),fill=BG)
+        r=p.get('readout_learning') or {}
+        phase=str(r.get('phase','WAITING'))
+        autonomous=phase in ('REPLAY','EVALUATION')
+        teacher_share=0.0 if autonomous else 1.0-float(r.get('student_share',0))
+        student_share=1.0 if autonomous else float(r.get('student_share',0))
+        accent=POS if autonomous else ((245,195,78) if phase=='DEMONSTRATE' else CYAN)
+        mode_title='AUTONOMOUS TEST' if autonomous else ('TEACHER DEMO' if phase=='DEMONSTRATE' else f'TRAINING  {phase}')
+        controller_title='STUDENT CONTROLS' if autonomous else ('TEACHER CONTROLS' if student_share<=0 else f'MIXED CONTROL  STUDENT {student_share:.0%}')
+
+        ep=int(p.get('episode',0))
+        ep_step=int(p.get('episode_step',p.get('step',0)))
+        total=int(p.get('total',0))
+        d.text((22,7),f'EP {ep}   /   STEP {ep_step:,} of {total:,}',font=font(18),fill=FG)
+        box=d.textbbox((0,0),mode_title,font=font(16));d.text((width-22-(box[2]-box[0]),9),mode_title,font=font(16),fill=accent)
+
+        samples=int(r.get('checkpoint_samples',r.get('samples',0))) if autonomous else int(r.get('samples',0))
+        train_n=int(r.get('train_samples',0))
+        val_n=int(r.get('validation_samples',0))
+        updates=int(r.get('checkpoint_gradient_updates',r.get('gradient_updates',0)) or 0) if autonomous else int(r.get('gradient_updates',0))
+
+        d.rounded_rectangle((18,39,width-18,91),radius=11,outline=(41,54,72),width=1)
+        d.text((31,50),controller_title,font=font(15),fill=FG)
+        if autonomous:
+            right=f'checkpoint  {samples:,} samples   /   {updates:,} updates'
+        else:
+            right=f'samples  {samples:,}   /   updates  {updates:,}   /   held-out  {val_n:,}'
+        rb=d.textbbox((0,0),right,font=font(12))
+        d.text((width-30-(rb[2]-rb[0]),52),right,font=font(12),fill=MUTED)
+
+        teacher=r.get('teacher') or {}
+        student=r.get('student') or {}
+        controller=r.get('controller') or {}
+        teacher_yaw=float(teacher.get('yaw',0.0))
+        student_yaw=float(student.get('yaw',0.0))
+        control_yaw=float(controller.get('yaw',student_yaw if autonomous else teacher_yaw))
+        teacher_walk=bool(teacher.get('forward',False))
+        student_walk_p=float(student.get('forward_probability',0.0))
+        control_walk=bool(controller.get('forward',False))
+        teacher_attack=bool(teacher.get('attack',False))
+        student_attack_p=float(student.get('attack_probability',0.0))
+        control_attack=bool(controller.get('attack',False))
+        cards=[
+            ('YAW',f'TEACHER {teacher_yaw:+.2f}',f'OUTPUT  {student_yaw:+.2f}',f'CONTROL {control_yaw:+.2f} deg/tick'),
+            ('WALK',f'TEACHER {"ON" if teacher_walk else "OFF"}',f'OUTPUT  p={student_walk_p:.2f}',f'CONTROL {"ON" if control_walk else "OFF"}'),
+            ('ATTACK',f'TEACHER {"ON" if teacher_attack else "OFF"}',f'OUTPUT  p={student_attack_p:.2f}',f'CONTROL {"ON" if control_attack else "OFF"}'),
+        ]
+        x0=18;gap=10;cw=(width-36-gap*2)//3
+        for i,(label,row1,row2,row3) in enumerate(cards):
+            x=x0+i*(cw+gap)
+            d.rounded_rectangle((x,101,x+cw,205),radius=11,outline=(41,54,72),width=1)
+            d.text((x+12,112),label,font=font(15),fill=FG)
+            d.text((x+12,138),row1,font=font(12),fill=(245,195,78))
+            d.text((x+12,162),row2,font=font(13),fill=CYAN)
+            d.text((x+12,186),row3,font=font(12),fill=POS if 'ON' in row3 or label=='YAW' else MUTED)
+
+        loss=r.get('train_loss');yaw=r.get('val_yaw_mae_deg');walk=r.get('val_walk_accuracy');attack=r.get('val_attack_accuracy');score=r.get('imitation_score')
+        fnum=lambda v,fmt: 'n/a' if v is None else format(float(v),fmt)
+        d.rounded_rectangle((18,215,width-18,338),radius=11,outline=(41,54,72),width=1)
+        d.text((30,225),'LEARNING METRICS',font=font(15),fill=FG)
+        if autonomous:
+            d.text((30,248),f'checkpoint from {samples:,} samples   |   {updates:,} updates',font=font(12),fill=MUTED)
+        else:
+            d.text((30,248),f'train {train_n:,}   |   held-out {val_n:,}   |   student control {student_share:.0%}',font=font(12),fill=MUTED)
+        d.text((30,281),f'loss  {fnum(loss,".3f")}',font=font(14),fill=CYAN)
+        d.text((178,281),f'yaw MAE  {fnum(yaw,".2f")} deg',font=font(14),fill=CYAN)
+        d.text((395,281),f'walk  {"n/a" if walk is None else f"{float(walk):.0%}"}',font=font(14),fill=CYAN)
+        d.text((548,281),f'attack  {"n/a" if attack is None else f"{float(attack):.0%}"}',font=font(14),fill=CYAN)
+        d.text((710,281),f'imitate  {"n/a" if score is None else f"{float(score):.0%}"}',font=font(14),fill=POS if score is not None and float(score)>=.85 else CYAN)
+
+        behavior=p.get('behavior') or {}
+        distance=float(p.get('distance',0));aim_deg=abs(float(np.degrees(float(p.get('angle',0)))))
+        break_now=float(p.get('progress',0));target_prog=float(behavior.get('normalized_target_progress',0));aim30=float(behavior.get('aim_within_30_fraction',0))
+        d.rounded_rectangle((18,348,width-18,532),radius=11,outline=(41,54,72),width=1)
+        d.text((30,358),'LIVE TASK',font=font(15),fill=FG)
+        d.text((30,395),f'DISTANCE  {distance:.2f} blocks',font=font(15),fill=CYAN)
+        d.text((303,395),f'AIM ERROR  {aim_deg:.1f} deg',font=font(15),fill=CYAN)
+        d.text((575,395),f'BREAK  {break_now:.0%}',font=font(15),fill=POS if break_now>0 else CYAN)
+        d.text((30,442),f'TARGET PROGRESS  {target_prog:+.0%}',font=font(14),fill=CYAN)
+        d.text((303,442),f'AIM < 30 deg  {aim30:.0%}',font=font(14),fill=CYAN)
+        d.text((575,442),f'TEACHER {teacher_share:.0%}   |   STUDENT {student_share:.0%}',font=font(14),fill=accent)
+        return im
+
     def training_panel(self,im,p):
+        if p.get('learning_mode')=='frozen-connectome-readout-v1':
+            return self.readout_learning_panel(im,p)
         """Render actions plus the signals that actually reach plasticity.
 
         The behavioural reward score is deliberately not presented as a stimulus:
