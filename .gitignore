@@ -8,3 +8,6 @@ __pycache__/
 
 # Local source backup; keep the archive out of versioned source.
 /Minecraft Fruit Fly.7z
+
+# Rendered video exports; keep large media out of versioned source.
+*.mov
