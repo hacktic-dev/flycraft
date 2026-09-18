@@ -1,0 +1,36 @@
+diff --git a/src/flycraft/visuals.py b/src/flycraft/visuals.py
+--- a/src/flycraft/visuals.py
++++ b/src/flycraft/visuals.py
+@@ -44,18 +44,22 @@ class Visuals:
+             d.rounded_rectangle((18,39,width-18,91),radius=11,outline=(41,54,72),width=1)
+             d.text((31,50),'STUDENT DRIVES MINECRAFT',font=font(15),fill=FG)
+             d.text((301,51),f'checkpoint  {samples:,} samples   /   {updates:,} updates',font=font(12),fill=MUTED)
+ 
+-            student=r.get('student') or {};controller=r.get('controller') or {}
+-            yaw=float(controller.get('yaw',student.get('yaw',0)))
+-            walk_p=float(student.get('forward_probability',0));walk_on=bool(controller.get('forward',False))
+-            attack_p=float(student.get('attack_probability',0));attack_on=bool(controller.get('attack',False))
+-            cards=[('YAW',f'{yaw:+.2f} deg/tick',None),('WALK',f'p={walk_p:.2f}','ON' if walk_on else 'OFF'),('ATTACK',f'p={attack_p:.2f}','ON' if attack_on else 'OFF')]
++            teacher=r.get('teacher') or {};student=r.get('student') or {};controller=r.get('controller') or {}
++            teacher_yaw=float(teacher.get('yaw',0));yaw=float(controller.get('yaw',student.get('yaw',0)))
++            teacher_walk=bool(teacher.get('forward',False));walk_p=float(student.get('forward_probability',0));walk_on=bool(controller.get('forward',False))
++            teacher_attack=bool(teacher.get('attack',False));attack_p=float(student.get('attack_probability',0));attack_on=bool(controller.get('attack',False))
++            cards=[
++                ('YAW',f'TEACHER {teacher_yaw:+.2f}',f'OUTPUT  {yaw:+.2f}',f'DELTA   {yaw-teacher_yaw:+.2f} deg/tick'),
++                ('WALK',f'TEACHER {"ON" if teacher_walk else "OFF"}',f'OUTPUT  {"ON" if walk_on else "OFF"}',f'p={walk_p:.2f}'),
++                ('ATTACK',f'TEACHER {"ON" if teacher_attack else "OFF"}',f'OUTPUT  {"ON" if attack_on else "OFF"}',f'p={attack_p:.2f}'),
++            ]
+             x0=18;gap=10;cw=(width-36-gap*2)//3
+-            for i,(label,value,state) in enumerate(cards):
++            for i,(label,teacher_value,output_value,detail) in enumerate(cards):
+                 x=x0+i*(cw+gap);d.rounded_rectangle((x,101,x+cw,205),radius=11,outline=(41,54,72),width=1)
+                 d.text((x+12,112),label,font=font(15),fill=FG)
+-                d.text((x+12,144),value,font=font(18),fill=CYAN)
+-                if state is not None:
+-                    d.text((x+12,176),state,font=font(16),fill=POS if state=='ON' else MUTED)
++                d.text((x+12,140),teacher_value,font=font(13),fill=(245,195,78))
++                d.text((x+12,164),output_value,font=font(14),fill=CYAN)
++                d.text((x+12,187),detail,font=font(12),fill=MUTED)
+ 
+             loss=r.get('train_loss');yaw_mae=r.get('val_yaw_mae_deg');walk=r.get('val_walk_accuracy');attack=r.get('val_attack_accuracy');score=r.get('imitation_score')
+             fnum=lambda v,fmt: 'n/a' if v is None else format(float(v),fmt)

@@ -1,0 +1,94 @@
+diff --git a/src/flycraft/imitation_train.py b/src/flycraft/imitation_train.py
+index 9c19450..8d27524 100644
+--- a/src/flycraft/imitation_train.py
++++ b/src/flycraft/imitation_train.py
+@@ -187,7 +187,7 @@ def evaluate(config, game_config, checkpoint, episodes, *, record=False, no_prev
+                     obs = env.step(action)[0]; after = observe(obs, start['target'])
+                     behavior = motion.update(before, after, action); value, parts = reward_components(before, after, config['reward'])
+                     reward += value; hits += int(bool(after['on_target']))
+-                    p = dashboard_panel(learner.samples, learner.samples, ep, tick+1, reward, after, behavior,
++                    p = dashboard_panel(tick+1, config['training']['max_steps_per_episode'], ep, tick+1, reward, after, behavior,
+                                         learner, teacher, student, command, base_control, action,
+                                         mode='REPLAY' if record else 'EVALUATION')
+                     fly.training = p
+diff --git a/src/flycraft/visuals.py b/src/flycraft/visuals.py
+index 685a2d0..53b2290 100644
+--- a/src/flycraft/visuals.py
++++ b/src/flycraft/visuals.py
+@@ -11,12 +11,13 @@ class Visuals:
+             readout=(training.get('readout_learning') or {}) if training.get('learning_mode')=='frozen-connectome-readout-v1' else {}
+             readout_phase=str(readout.get('phase',''))
+             if readout_phase in ('REPLAY','EVALUATION'):
+-                status='CONNECTOME FROZEN / AUTONOMOUS READOUT'
++                status=None
+             elif training.get('learning_mode')=='frozen-connectome-readout-v1':
+                 status='CONNECTOME FROZEN / READOUT LEARNING'
+             else:
+                 status='EXPERIMENTAL LEARNING' if getattr(self.fly,'learning',False) else 'FROZEN / REPLAY'
+-            d.text((28,39),status,font=font(14),fill=CYAN)
++            if status:
++                d.text((28,39),status,font=font(14),fill=CYAN)
+             d.text((width-300,15),f'{np.count_nonzero(counts):,} firing this frame',font=font(18),fill=CYAN)
+             d.text((28,height-27),'MaleCNS anatomy   /   gold = spikes   /   250 ms visual trail',font=font(16),fill=FG)
+             return im
+@@ -33,6 +34,60 @@ class Visuals:
+         phase=str(r.get('phase','WAITING'))
+         autonomous=phase in ('REPLAY','EVALUATION')
+         phase_col=(245,195,78) if phase=='DEMONSTRATE' else CYAN if phase=='DAGGER' else POS
++
++        if autonomous:
++            # Replay/evaluation gets a deliberately sparse, data-first dashboard for video.
++            # The narration explains the architecture; this panel only shows test state,
++            # model outputs, checkpoint quality and live task telemetry.
++            ep=int(p.get('episode',0)); ep_step=int(p.get('episode_step',p.get('step',0))); total=int(p.get('total',0))
++            d.text((22,7),f'EP {ep}   /   STEP {ep_step:,} of {total:,}',font=font(18),fill=FG)
++            title='AUTONOMOUS TEST'
++            box=d.textbbox((0,0),title,font=font(16));d.text((width-22-(box[2]-box[0]),9),title,font=font(16),fill=POS)
++
++            samples=int(r.get('checkpoint_samples',r.get('samples',0)));updates=int(r.get('checkpoint_gradient_updates',r.get('gradient_updates',0)) or 0)
++            d.rounded_rectangle((18,39,width-18,91),radius=11,outline=(41,54,72),width=1)
++            d.text((31,50),'STUDENT DRIVES MINECRAFT',font=font(15),fill=FG)
++            d.text((301,51),f'checkpoint  {samples:,} samples   /   {updates:,} updates',font=font(12),fill=MUTED)
++
++            student=r.get('student') or {};controller=r.get('controller') or {}
++            yaw=float(controller.get('yaw',student.get('yaw',0)))
++            walk_p=float(student.get('forward_probability',0));walk_on=bool(controller.get('forward',False))
++            attack_p=float(student.get('attack_probability',0));attack_on=bool(controller.get('attack',False))
++            cards=[('YAW',f'{yaw:+.2f} deg/tick',None),('WALK',f'p={walk_p:.2f}','ON' if walk_on else 'OFF'),('ATTACK',f'p={attack_p:.2f}','ON' if attack_on else 'OFF')]
++            x0=18;gap=10;cw=(width-36-gap*2)//3
++            for i,(label,value,state) in enumerate(cards):
++                x=x0+i*(cw+gap);d.rounded_rectangle((x,101,x+cw,205),radius=11,outline=(41,54,72),width=1)
++                d.text((x+12,112),label,font=font(15),fill=FG)
++                d.text((x+12,144),value,font=font(18),fill=CYAN)
++                if state is not None:
++                    d.text((x+12,176),state,font=font(16),fill=POS if state=='ON' else MUTED)
++
++            loss=r.get('train_loss');yaw_mae=r.get('val_yaw_mae_deg');walk=r.get('val_walk_accuracy');attack=r.get('val_attack_accuracy');score=r.get('imitation_score')
++            fnum=lambda v,fmt: 'n/a' if v is None else format(float(v),fmt)
++            d.rounded_rectangle((18,215,width-18,338),radius=11,outline=(41,54,72),width=1)
++            d.text((30,225),'CHECKPOINT METRICS',font=font(15),fill=FG)
++            d.text((30,258),f'loss  {fnum(loss,".3f")}',font=font(14),fill=CYAN)
++            d.text((197,258),f'yaw MAE  {fnum(yaw_mae,".2f")} deg',font=font(14),fill=CYAN)
++            d.text((438,258),f'walk  {"n/a" if walk is None else f"{float(walk):.0%}"}',font=font(14),fill=CYAN)
++            d.text((610,258),f'attack  {"n/a" if attack is None else f"{float(attack):.0%}"}',font=font(14),fill=CYAN)
++            if score is not None:
++                d.text((782,258),f'imitate  {float(score):.0%}',font=font(14),fill=POS if float(score)>=.85 else CYAN)
++            d.text((30,299),f'trained samples  {samples:,}',font=font(12),fill=MUTED)
++            d.text((240,299),f'gradient updates  {updates:,}',font=font(12),fill=MUTED)
++
++            behavior=p.get('behavior') or {}
++            distance=float(p.get('distance',0));aim_deg=abs(float(np.degrees(float(p.get('angle',0)))))
++            break_now=float(p.get('progress',0));target_prog=float(behavior.get('normalized_target_progress',0));aim30=float(behavior.get('aim_within_30_fraction',0))
++            d.rounded_rectangle((18,348,width-18,532),radius=11,outline=(41,54,72),width=1)
++            d.text((30,358),'LIVE TASK',font=font(15),fill=FG)
++            d.text((30,397),f'DISTANCE  {distance:.2f} blocks',font=font(15),fill=CYAN)
++            d.text((313,397),f'AIM ERROR  {aim_deg:.1f} deg',font=font(15),fill=CYAN)
++            d.text((595,397),f'BREAK  {break_now:.0%}',font=font(15),fill=POS if break_now>0 else CYAN)
++            d.text((30,446),f'TARGET PROGRESS  {target_prog:+.0%}',font=font(14),fill=CYAN)
++            d.text((313,446),f'AIM < 30 deg  {aim30:.0%}',font=font(14),fill=CYAN)
++            d.text((595,446),f'STEP  {ep_step:,} / {total:,}',font=font(14),fill=MUTED)
++            return im
++
+         d.text((22,7),f'EP {p.get("episode",0)}   /   {p.get("step",0):,} of {p.get("total",0):,} steps',font=font(18),fill=FG)
+         title='CONNECTOME FROZEN  /  AUTONOMOUS STUDENT' if autonomous else 'CONNECTOME FROZEN  /  MOTOR READOUT LEARNING'
+         box=d.textbbox((0,0),title,font=font(16));d.text((width-22-(box[2]-box[0]),9),title,font=font(16),fill=CYAN)

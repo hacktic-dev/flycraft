@@ -1,0 +1,62 @@
+diff --git a/src/flycraft/imitation_train.py b/src/flycraft/imitation_train.py
+index dc42bee..dc74844 100644
+--- a/src/flycraft/imitation_train.py
++++ b/src/flycraft/imitation_train.py
+@@ -304,13 +304,24 @@ def main():
+                 fly.training = p
+                 if rec: rec.write(fly, rgb, preview_rgb, base_control, action, before, after, tick, neural, p)
+                 if state['step'] % 20 == 0:
+-                    m = learner.metrics or {}; loss='n/a' if learner.train_loss is None else f'{learner.train_loss:.3f}'
+-                    yaw='n/a' if m.get('yaw_mae_deg') is None else f'{m["yaw_mae_deg"]:.2f}deg'
+-                    score='n/a' if m.get('imitation_score') is None else f'{m["imitation_score"]:.0%}'
+-                    print(f'Step {state["step"]:,}/{target_steps:,} | Ep {episode} | {learner.phase()} | '
+-                          f'samples {learner.samples:,} | loss {loss} | val yaw {yaw} | imitate {score} | '
+-                          f'student {learner.student_share():.0%} | Prog {behavior["normalized_target_progress"]:+.0%} | '
+-                          f'Aim<30 {behavior["aim_within_30_fraction"]:.0%} | Break {behavior["max_break_progress"]:.0%}', flush=True)
++                    m = learner.metrics or {}
++                    loss = 'n/a' if learner.train_loss is None else f'{learner.train_loss:.3f}'
++                    yaw = 'n/a' if m.get('yaw_mae_deg') is None else f'{m["yaw_mae_deg"]:.2f}deg'
++                    walk = 'n/a' if m.get('walk_accuracy') is None else f'{m["walk_accuracy"]:.0%}'
++                    attack = 'n/a' if m.get('attack_accuracy') is None else f'{m["attack_accuracy"]:.0%}'
++                    score = 'n/a' if m.get('imitation_score') is None else f'{m["imitation_score"]:.0%}'
++                    student_share = learner.student_share()
++                    print(
++                        f'Step {state["step"]:,}/{target_steps:,} | Ep {episode} | {learner.phase()} | '
++                        f'DATA train={learner.train.size:,} val={learner.validation.size:,} | '
++                        f'FIT updates={learner.gradient_updates:,} loss={loss} | '
++                        f'HELDOUT yawMAE={yaw} walk={walk} attack={attack} score={score} | '
++                        f'CTRL student={student_share:.0%} teacher={1.0-student_share:.0%} | '
++                        f'TASK prog={behavior["normalized_target_progress"]:+.0%} '
++                        f'aim<30={behavior["aim_within_30_fraction"]:.0%} '
++                        f'break={behavior["max_break_progress"]:.0%}',
++                        flush=True,
++                    )
+                 if state['step'] % 200 == 0: assert_connectome_frozen(fly, frozen_weights)
+                 if not after['target_present']: break
+ 
+@@ -322,9 +333,22 @@ def main():
+             state['history'].append(result); state['episode']=episode
+             assert_connectome_frozen(fly, frozen_weights)
+             model = save_training_state(run, learner, state, outroot)
+-            print(f'Episode {episode} done | {learner.phase()} | Prog {result["normalized_target_progress"]:+.0%} | '
+-                  f'Aim<30 {result["aim_within_30_fraction"]:.0%} | Break {result["max_break_progress"]:.0%} | '
+-                  f'{"SUCCESS" if result["success"] else "timeout"} | saved {model.name}', flush=True)
++            m = learner.metrics or {}
++            yaw = 'n/a' if m.get('yaw_mae_deg') is None else f'{m["yaw_mae_deg"]:.2f}deg'
++            walk = 'n/a' if m.get('walk_accuracy') is None else f'{m["walk_accuracy"]:.0%}'
++            attack = 'n/a' if m.get('attack_accuracy') is None else f'{m["attack_accuracy"]:.0%}'
++            score = 'n/a' if m.get('imitation_score') is None else f'{m["imitation_score"]:.0%}'
++            student_share = learner.student_share()
++            print(
++                f'Episode {episode} done | {learner.phase()} | samples={learner.samples:,} | '
++                f'HELDOUT yawMAE={yaw} walk={walk} attack={attack} score={score} | '
++                f'CTRL student={student_share:.0%} teacher={1.0-student_share:.0%} | '
++                f'TASK prog={result["normalized_target_progress"]:+.0%} '
++                f'aim<30={result["aim_within_30_fraction"]:.0%} '
++                f'break={result["max_break_progress"]:.0%} | '
++                f'{"SUCCESS" if result["success"] else "timeout"} | saved {model.name}',
++                flush=True,
++            )
+             if rec: rec.close(result); rec=None
+     except KeyboardInterrupt:
+         print('Stopping and saving learned readout...', flush=True)
