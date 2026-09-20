@@ -133,8 +133,8 @@ Replay    = chosen checkpoint      → frozen tests + recorded footage
 ![Signed reinforcement training dashboard](images/training-dashboard.png)
 
 *The signed-reinforcement training dashboard: Minecraft view, retina, neural
-activity, decoder readouts, and the current-episode / completed-episode / rolling
-reward graphs.*
+activity, the decoder readouts, the per-tick `PLASTIC TEACHING` signal, and the
+`IS IT LEARNING? | EPISODE PERFORMANCE OVER TIME` learning curve.*
 
 `train.ps1` automatically runs `scripts/prepare_training_runtime.py` before
 launching so CraftGround exposes genuine block-breaking telemetry.
@@ -219,6 +219,36 @@ exactly, but the Minecraft world is not. On resume/branch from such a state,
 FlyCraft restarts the episode and records the unfinished partial episode as
 `censored: true` rather than pretending it completed.
 
+### Viewing learning over time
+
+There is **no separate plotting script**. The learning-over-time graph is a panel
+of the dashboard itself: `IS IT LEARNING? | EPISODE PERFORMANCE OVER TIME`.
+
+- each dot is one completed episode's combined task score (its reward total);
+- the cyan line is the rolling average over
+  `dashboard.reward_rolling_average_episodes`;
+- a gold ring marks episodes that broke the log.
+
+It is evaluation telemetry only — it is never fed back to the fly. The per-tick
+teaching signal is a separate panel, `PLASTIC TEACHING | THIS EPISODE`, which
+shows what was actually injected into plasticity.
+
+Where to see it:
+
+- **Live** during `train.ps1`, and inside the recorded `dashboard.mp4` files.
+- **Offline** by replaying a recorded episode folder with the existing renderer,
+  which re-reads `reward-history.json` and `steps-*.jsonl.gz` and redraws the
+  curve:
+
+  ```powershell
+  .\run-baseline.ps1 -Playback ".\artifacts\training\run-...\episode-000040-step-000015600" -Steps 1 -NoPreview
+  # writes ...\playback-proof\dashboard-preview.png
+  ```
+
+The raw numbers are in `reward-history.json` (per episode) and
+`metrics-<timestamp>.jsonl` (per tick); see
+[checkpoints-and-artifacts.md](checkpoints-and-artifacts.md).
+
 ---
 
 ## 5. Frozen-connectome supervised readout — `train-readout.ps1`
@@ -230,8 +260,9 @@ labels, then lets the student act autonomously. See
 
 ![Supervised readout dashboard](images/readout-dashboard.png)
 
-*The supervised-readout dashboard: the student's yaw/walk/attack, held-out
-imitation metrics, and the live task progress. Note the R8 colour retina.*
+*The supervised-readout dashboard during DAgger: teacher/student control share,
+the student's yaw/walk/attack, held-out imitation metrics, and the live task
+progress. Note the R8 colour retina.*
 
 ```powershell
 .\train-readout.ps1 -Mode Fresh    -Steps 10000 -Config config/new-arch.json

@@ -134,6 +134,10 @@ expensive dashboard/video/activity work.
 |---|---|
 | `reward_rolling_average_episodes` | Rolling-average window in the dashboard. |
 
+This window drives the cyan rolling line in the dashboard's
+`IS IT LEARNING? | EPISODE PERFORMANCE OVER TIME` graph — see
+[running-modes.md](running-modes.md#viewing-learning-over-time).
+
 ### `decoder` (optional)
 
 Absent = legacy BCI. See [decoder.md](decoder.md). Fields depend on mode:

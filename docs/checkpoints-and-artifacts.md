@@ -99,6 +99,10 @@ number, step range, total reward, mean cumulative reward, starting state,
 success, final distance, angular error, hit rate, rolling reward, teaching
 counts, plasticity summary and behaviour metrics.
 
+This is the data behind the dashboard's
+`IS IT LEARNING? | EPISODE PERFORMANCE OVER TIME` graph (see
+[running-modes.md](running-modes.md#viewing-learning-over-time)).
+
 ### `metrics-<timestamp>.jsonl`
 
 Fine-grained telemetry: one JSON object per control tick, including global step,
