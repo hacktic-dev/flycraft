@@ -69,12 +69,21 @@ Neural-only check without launching Minecraft:
 
 All commands run from the project root. Press `Ctrl+C` to stop cleanly.
 
+![Minecraft view](images/minecraft-view.png)
+
+*The fly's 640x480 Minecraft view — here the frozen baseline's red-concrete
+target pillar in the test arena.*
+
 ### A. Frozen fly — nothing learns
 
 ```powershell
 .\run-baseline.ps1              # run until Ctrl+C
 .\run-baseline.ps1 -Steps 1200  # ~60 simulated seconds
 ```
+
+![Frozen baseline dashboard](images/baseline-dashboard.png)
+
+*The frozen-baseline dashboard (`-RecordVisuals` writes this as video).*
 
 ### B. Let the fly's own synapses learn
 

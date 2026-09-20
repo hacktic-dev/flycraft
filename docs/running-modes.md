@@ -31,6 +31,11 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 Runs the original fixed-weight fly against live Minecraft. Learning is off and
 the weight hash is verified before and after.
 
+![Frozen baseline dashboard](images/baseline-dashboard.png)
+
+*The frozen-baseline dashboard: game view, retina, anatomical activity and
+descending-neuron readouts, with `LEARNING: OFF`.*
+
 ```powershell
 .\run-baseline.ps1                 # run until Ctrl+C
 .\run-baseline.ps1 -Steps 1200     # stop after N control ticks
@@ -70,6 +75,16 @@ Any video/activity recording automatically preserves the Minecraft trajectory.
 .\run-baseline.ps1 -ActivityMode Voltage
 .\run-baseline.ps1 -ActivityMode Combined -VoltageSmoothingMs 80
 ```
+
+![Retina view](images/retina-r8.png)
+
+*The retina view. In learning mode it shows R1-R6 luminance (gray/white) plus the
+inferred R8p (blue) and R8y (green) colour inputs.*
+
+![Neural activity view](images/neural-activity.png)
+
+*The anatomical neural-activity view: MaleCNS positions, gold spike trail, and
+live population/descending-neuron rates.*
 
 Voltage smoothing is visual only; it never alters the simulation.
 
@@ -114,6 +129,12 @@ Branch    = chosen checkpoint      → create a NEW timeline
 Evaluate  = chosen checkpoint      → frozen tests, no learning
 Replay    = chosen checkpoint      → frozen tests + recorded footage
 ```
+
+![Signed reinforcement training dashboard](images/training-dashboard.png)
+
+*The signed-reinforcement training dashboard: Minecraft view, retina, neural
+activity, decoder readouts, and the current-episode / completed-episode / rolling
+reward graphs.*
 
 `train.ps1` automatically runs `scripts/prepare_training_runtime.py` before
 launching so CraftGround exposes genuine block-breaking telemetry.
@@ -206,6 +227,11 @@ A separate learning path that never changes a fly synapse. It trains a small
 motor readout on simulated neural spike features using a scripted expert's
 labels, then lets the student act autonomously. See
 [readout-learning.md](readout-learning.md) for the full pipeline.
+
+![Supervised readout dashboard](images/readout-dashboard.png)
+
+*The supervised-readout dashboard: the student's yaw/walk/attack, held-out
+imitation metrics, and the live task progress. Note the R8 colour retina.*
 
 ```powershell
 .\train-readout.ps1 -Mode Fresh    -Steps 10000 -Config config/new-arch.json

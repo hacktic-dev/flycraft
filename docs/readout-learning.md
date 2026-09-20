@@ -23,6 +23,12 @@ Before training, a fresh run executes three teacher-only preflight episodes and
 requires at least two successful log breaks. If the expert itself is wrong,
 training aborts immediately.
 
+![Supervised readout dashboard](images/readout-dashboard.png)
+
+*The readout dashboard during an autonomous probe: the student's yaw/walk/attack
+versus the teacher's labels, held-out imitation metrics (loss, yaw MAE, walk and
+attack accuracy, imitation score) and the live task state.*
+
 Training is deliberately staged for reliability:
 
 1. **DEMONSTRATE**: teacher controls Minecraft; every neural state is labelled.

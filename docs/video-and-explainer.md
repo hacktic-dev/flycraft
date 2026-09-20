@@ -25,6 +25,11 @@ Seven scenes, ~80 seconds total:
 | 6 | Learn to predict an expert | 06 / THE TEACHER | 12.0 s |
 | 7 | The interpreter only sees the brain | 07 / THE INPUT BOUNDARY | 9.0 s |
 
+![Interpreter contact sheet](images/explainer-contact-sheet.png)
+
+*Contact sheet of the seven scenes (`--self-test` writes the individual frames
+plus this sheet to `artifacts/interpreter-quality/`).*
+
 ### CLI
 
 ```powershell
@@ -51,6 +56,10 @@ PNGs are written. MP4 export uses H.264/libx264, CRF 17, 1920x1080, silent, with
   previous standalone "learning visualizer" (arena + brain panels, staged
   idle/reward/punish/strengthen/weaken animation). It reuses
   `flycraft_pictograms` for artwork and is kept only as an archived alternative.
+
+  ![Old learning visualizer stages](images/learning-visualizer-stages.png)
+
+  *The archived learning visualizer's eight stages (`--preview` output).*
 
 ### `flycraft_pictograms.py`
 

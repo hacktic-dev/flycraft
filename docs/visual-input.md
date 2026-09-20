@@ -19,6 +19,11 @@ of `FatigueSelectiveMemoryBrain`:
 
 Minecraft game-state telemetry is still not supplied to the brain.
 
+![Retina with R8 colour inputs](images/retina-r8.png)
+
+*The retina view in learning mode: gray/white = R1-R6 luminance, blue = R8p,
+green = R8y.*
+
 These are modelling assumptions, not validated fly photoreceptor physiology.
 DOOMFLY itself labels this visual model experimental and unvalidated.
 

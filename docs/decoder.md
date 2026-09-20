@@ -76,6 +76,12 @@ command  = deadband(opponent - command_offset) * polarity
 between a chosen cell side and useful visual steering still requires a
 closed-loop experiment.
 
+![Bilateral decoder panel](images/decoder-panel.png)
+
+*The decoder panel during a frozen evaluation: DNp20 L/R rates, the balanced
+opponent mapping to camera degrees, the DNpe017 forward threshold and the
+accumulated attack hold. Teaching is off, as expected for evaluation/replay.*
+
 ---
 
 ## 3. Calibration and validation tools
