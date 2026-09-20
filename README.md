@@ -15,6 +15,9 @@ results.
 This README is the entry point and quick reference. The details live in
 [docs/](#documentation-index).
 
+> **New here?** Start with [docs/getting-started.md](docs/getting-started.md) —
+> a short install-and-run walkthrough of the three main modes.
+
 ---
 
 ## What the project can do
@@ -32,7 +35,8 @@ There are three independent control/learning paths plus the offline viewers:
 
 ## Quick start
 
-Run everything from the project root in **PowerShell**.
+For a guided first run see [docs/getting-started.md](docs/getting-started.md).
+The short version: run everything from the project root in **PowerShell**.
 
 ```powershell
 # One-time toolchain, data and native-runtime setup (long)
@@ -142,6 +146,7 @@ Get-ChildItem ".\artifacts\training\run-*\checkpoints" -Directory
 
 | Document | Contents |
 |---|---|
+| [docs/getting-started.md](docs/getting-started.md) | Install and run the three main modes — the gentle overview. |
 | [docs/architecture.md](docs/architecture.md) | How the whole system works: data path, neural simulation, decoders, learning rules, recording. |
 | [docs/running-modes.md](docs/running-modes.md) | Every way to run the program: baseline, all `train.ps1` modes, readout modes, offline player, visualizer. |
 | [docs/setup.md](docs/setup.md) | `setup.ps1`, `env.ps1`, toolchain download, native kernel build, CraftGround runtime patches. |
