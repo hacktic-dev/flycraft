@@ -1,9 +1,9 @@
-# Speed benchmark
+# Performance
 
 Measured locally on 2026-09-12, with all 166,700 neurons and 25,582,938 retained
 edges. Eight warm-up ticks, then 40 ticks at 50 simulated ms per tick. Startup,
-checkpoint saving, and episode resets are excluded. Short measurements fluctuate;
-the live and fixed-input replay results are reported separately.
+checkpoint saving and episode resets are excluded. Short measurements fluctuate;
+live and fixed-input replay results are reported separately.
 
 | Mode | Before ms/tick | After ms/tick | Speedup |
 |---|---:|---:|---:|
@@ -22,32 +22,38 @@ Live simulated seconds per wall second improved from 0.2254 to 0.2303.
 | JSON logging | 0.13 | 0.12 |
 | Recording: additional cost on selected ticks | 718.72 | 735.24 |
 
-Recording was separately sampled over four ticks using the existing 1080p output.
-Its cost excludes recorder construction/close and includes rendering, encoding
-pipe writes and activity serialization. It is not part of the non-recorded total.
-Profiling uses an instrumented native library in replay, separately from normal
-timings: after optimisation, active integration costs 99.69 ms/tick, synaptic
-delivery 88.42 ms (including 4.84 ms plasticity), and full scans/tables 6.30 ms.
-These instrumentation numbers are not additive to the live table.
+Recording was separately sampled over four ticks using the existing 1080p
+output. Its cost excludes recorder construction/close and includes rendering,
+encoding pipe writes and activity serialization. It is not part of the
+non-recorded total. Profiling uses an instrumented native library in replay,
+separately from normal timings: after optimisation, active integration costs
+99.69 ms/tick, synaptic delivery 88.42 ms (including 4.84 ms plasticity), and
+full scans/tables 6.30 ms. These instrumentation numbers are not additive to the
+live table.
+
+---
 
 ## Changes and validation
 
-* Exact: specialize the common one-timestep native evolution case, retaining
+- **Exact:** specialize the common one-timestep native evolution case, retaining
   general elapsed-time handling and the original floating-point expression.
-* Exact: sample one held RGB image once per control tick; retain every 10 ms
-  retinal filter/current update, native timestep, and spike schedule.
-* Checkpoint numerical identity is unchanged; `native_runtime` in new run model
+- **Exact:** sample one held RGB image once per control tick; retain every 10 ms
+  retinal filter/current update, native timestep and spike schedule.
+- Checkpoint numerical identity is unchanged; `native_runtime` in new run model
   metadata records the actual accelerated executable separately.
-* The full-network regression compares all state/weight bytes, controller output
+- The full-network regression compares all state/weight bytes, controller output
   and 60 Hz spike bins, tests actual depression (4,184 changed plastic edges),
   frozen evaluation and checkpoint loading in both directions.
-* An AVX2 batch experiment passed exactness but was slower; it was discarded.
-  No approximate mode, pruning, rate neurons or changed learning rule was added.
+- An AVX2 batch experiment passed exactness but was slower; it was discarded. No
+  approximate mode, pruning, rate neurons or changed learning rule was added.
 
-[Aimbug](https://github.com/slickdomi/aimbug) informed the batching investigation.
-Its reduced/rate-based visual model was not adopted because it would change this
-model. The next worthwhile experiment is moving video rendering/encoding to an
-offline replay of recorded observations, retaining the same simulation inputs.
+[Aimbug](https://github.com/slickdomi/aimbug) informed the batching
+investigation. Its reduced/rate-based visual model was not adopted because it
+would change this model. The next worthwhile experiment is moving video
+rendering/encoding to an offline replay of recorded observations, retaining the
+same simulation inputs.
+
+---
 
 ## Reproduce
 
@@ -55,7 +61,7 @@ Run these individually in PowerShell from the project directory; do not run
 benchmarks concurrently. A live run launches a separate Minecraft on port 8031.
 
 ```powershell
-. ./env.ps1
+. .\env.ps1
 $env:OPENBLAS_NUM_THREADS='1'
 & $python scripts/benchmark_speed.py --live --reference --label reference-live
 & $python scripts/benchmark_speed.py --live --label optimized-live
@@ -72,3 +78,24 @@ also run without a captured trace, using seeded synthetic frames. Frozen
 pre-optimisation adapters are retained under `scripts/fixtures/speed_reference`.
 `FLYCRAFT_REFERENCE_KERNEL=1` disables only the native specialization for
 diagnostics; use benchmark `--reference` for the complete original input path.
+
+---
+
+## Practical training speed
+
+Training speed is strongly affected by optional visualisation/video work.
+`-NoPreview` prevents the interactive dashboard window, and for training
+episodes not selected by `record_every_episodes` the project avoids the
+expensive dashboard/video/raw-activity path. Recorded episodes still write
+whatever recording types are enabled, even with `-NoPreview`.
+
+The two largest knobs for a long run:
+
+```text
+record_every_episodes
+evaluate_every_steps × evaluation_episodes
+```
+
+A sparse video cadence plus manual post-training Replay usually gives better
+footage per unit of compute than recording every attempt. See
+[configuration.md](configuration.md).
