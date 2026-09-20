@@ -81,9 +81,10 @@ target pillar in the test arena.*
 .\run-baseline.ps1 -Steps 1200  # ~60 simulated seconds
 ```
 
-![Frozen baseline dashboard](images/baseline-dashboard.png)
+![Example dashboard](images/example-dashboard.png)
 
-*The frozen-baseline dashboard (`-RecordVisuals` writes this as video).*
+*An example dashboard (`-RecordVisuals` writes this as video). The same
+visualiser is used in every mode.*
 
 ### B. Let the fly's own synapses learn
 

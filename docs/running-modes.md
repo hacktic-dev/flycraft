@@ -31,10 +31,11 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 Runs the original fixed-weight fly against live Minecraft. Learning is off and
 the weight hash is verified before and after.
 
-![Frozen baseline dashboard](images/baseline-dashboard.png)
+![Example dashboard](images/example-dashboard.png)
 
-*The frozen-baseline dashboard: game view, retina, anatomical activity and
-descending-neuron readouts, with `LEARNING: OFF`.*
+*An example dashboard (from the supervised-readout run): game view, retina,
+anatomical activity and the live panel. The baseline uses the same visualiser
+with learning off.*
 
 ```powershell
 .\run-baseline.ps1                 # run until Ctrl+C
@@ -132,9 +133,9 @@ Replay    = chosen checkpoint      → frozen tests + recorded footage
 
 ![Signed reinforcement training dashboard](images/training-dashboard.png)
 
-*The signed-reinforcement training dashboard: Minecraft view, retina, neural
-activity, the decoder readouts, the per-tick `PLASTIC TEACHING` signal, and the
-`IS IT LEARNING? | EPISODE PERFORMANCE OVER TIME` learning curve.*
+*An example training dashboard (supervised-readout DAgger run): teacher/student
+control share, the student's yaw/walk/attack, held-out imitation metrics and live
+task progress.*
 
 `train.ps1` automatically runs `scripts/prepare_training_runtime.py` before
 launching so CraftGround exposes genuine block-breaking telemetry.
@@ -260,9 +261,9 @@ labels, then lets the student act autonomously. See
 
 ![Supervised readout dashboard](images/readout-dashboard.png)
 
-*The supervised-readout dashboard during DAgger: teacher/student control share,
-the student's yaw/walk/attack, held-out imitation metrics, and the live task
-progress. Note the R8 colour retina.*
+*An example supervised-readout dashboard during an autonomous test: student-only
+control, the student's yaw/walk/attack, held-out imitation metrics, and the live
+task progress. Note the R8 colour retina.*
 
 ```powershell
 .\train-readout.ps1 -Mode Fresh    -Steps 10000 -Config config/new-arch.json

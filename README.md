@@ -31,10 +31,10 @@ There are three independent control/learning paths plus the offline viewers:
 | **Frozen-connectome supervised readout** | a small external motor readout; connectome stays frozen | `.\train-readout.ps1` | [readout-learning](docs/readout-learning.md) |
 | **Offline viewers** | n/a | `.\play-activity.ps1`, `run-learning-visualizer.cmd` | [running-modes](docs/running-modes.md) |
 
-![Frozen baseline live dashboard](docs/images/baseline-dashboard.png)
+![Example FlyCraft dashboard](docs/images/example-dashboard.png)
 
-*The frozen-baseline dashboard: Minecraft view, the 3,335-sample retina, the
-anatomical MaleCNS activity map, and the live descending-neuron readouts.*
+*An example FlyCraft dashboard (supervised-readout run): Minecraft view, retina,
+anatomical MaleCNS activity, and the live learning/readout panel.*
 
 ---
 

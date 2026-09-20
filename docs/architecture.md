@@ -50,11 +50,11 @@ compressed into 4:3 pixels. FlyCraft instead:
 The crop is geometric only; it adds no game-state information. See
 `game.pixels` and `game.preview_pixels` in `src/flycraft/game.py`.
 
-![The whole loop in one frame](images/baseline-dashboard.png)
+![The whole loop in one frame](images/example-dashboard.png)
 
 *One dashboard frame of the whole loop: Minecraft RGB (top left), the retinal
-samples it becomes (top right), the MaleCNS anatomy lighting up (bottom left),
-and the decoded descending-neuron rates (bottom right).*
+samples it becomes (top right), the MaleCNS anatomy lighting up (bottom right),
+and the training/readout panel (bottom left).*
 
 ---
 
